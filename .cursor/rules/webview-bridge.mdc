@@ -1,0 +1,10 @@
+---
+description: WebView와 네이티브 사이 postMessage 브릿지를 추가하거나 수정하는 작업에 적용
+alwaysApply: false
+---
+
+- 모든 브릿지 메시지는 `src/bridge/webviewBridge.ts`의 `BridgeMessage` 유니온 타입에 먼저 추가한다. 타입 없는 메시지를 임의로 주고받지 않는다.
+- 웹 → 네이티브 메시지는 반드시 `JSON.parse`를 try/catch로 감싸고, 실패 시 조용히 무시하며 `console.warn`만 남긴다 (앱이 죽으면 안 된다).
+- 네이티브 → 웹 메시지는 `sendToWeb()` 헬퍼를 통해서만 보낸다 (`webview.postMessage` 직접 호출 금지, 일관성 유지).
+- 브릿지 메시지 payload에 사용자 개인정보(위치, 연락처 등)를 담을 땐 최소한으로만 담고, 무엇을 담았는지 커밋 메시지나 PR 설명에 명시한다.
+- 웹뷰에서 받은 URL이나 경로를 네이티브 Linking이나 파일시스템 API에 그대로 넘기지 않는다. 반드시 화이트리스트로 검증한다.

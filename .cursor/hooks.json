@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      { "command": ".cursor/hooks/block-dangerous-commands.sh" }
+    ],
+    "afterFileEdit": [
+      { "command": ".cursor/hooks/lint-after-edit.sh" }
+    ],
+    "stop": [
+      { "command": ".cursor/hooks/session-summary.sh" }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+---
+description: 네이버맵(@mj-studio/react-native-naver-map) 관련 코드를 작성하거나 수정하는 작업에 적용
+alwaysApply: false
+---
+
+- 이 패키지의 정확한 컴포넌트/prop 이름은 버전마다 바뀔 수 있다. 확신이 없는 API는 추측해서 코드를 쓰지 말고, TODO 주석을 남기고 https://rnnavermap.mjstudio.net 문서 확인이 필요하다고 사용자에게 알린다.
+- 네이버맵 Client ID 같은 키는 절대 코드에 하드코딩하지 않는다. 항상 `.env`의 `NAVER_MAP_CLIENT_ID`를 통해서만 참조한다.
+- 지도 관련 네이티브 설정 변경(`app.config.ts`의 plugins, `android/`, `ios/` 폴더)은 반드시 변경 내용을 요약해서 사용자에게 알린다.
+- 마커/오버레이가 많아질 수 있는 화면(장소 다수 표시)에서는 클러스터링 적용 여부를 먼저 사용자와 상의한다 (성능 이슈로 이어질 수 있음).
