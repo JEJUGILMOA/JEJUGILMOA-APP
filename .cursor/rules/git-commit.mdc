@@ -1,0 +1,10 @@
+---
+description: git 커밋 메시지는 제목만 사용
+alwaysApply: true
+---
+
+# 커밋 메시지 규칙
+
+- `git commit` 시 **제목(subject) 한 줄만** 작성한다. 본문(description/body)은 쓰지 않는다.
+- `Co-authored-by: Cursor`, `Made-with: Cursor`, `cursoragent@cursor.com` 등 Cursor attribution/trailer를 **절대 추가하지 않는다**.
+- `--trailer`로 Cursor 관련 trailer를 붙이지 않는다.
