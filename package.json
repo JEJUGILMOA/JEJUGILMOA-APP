@@ -2,6 +2,7 @@
   "name": "jeju-gilmoa",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.20.0",
   "dependencies": {
     "@expo/ui": "~57.0.6",
     "@gorhom/bottom-sheet": "^5.2.14",
@@ -27,6 +28,7 @@
     "react-native-reanimated": "4.5.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
+    "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
     "react-native-webview": "13.16.1",
     "react-native-worklets": "0.10.0"
