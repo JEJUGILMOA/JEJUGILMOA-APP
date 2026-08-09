@@ -12,8 +12,8 @@
 
 ## Phase 1 — 네비게이션 셸 (expo-router)
 - [ ] `app/_layout.tsx`에서 `GestureHandlerRootView`/`SafeAreaProvider` 세팅 확인
-- [ ] `app/(tabs)/_layout.tsx`의 탭 4개(홈/지도/저장/마이) 아이콘·라벨 확인
-- [ ] 각 탭 라우트(`index.tsx`, `map.tsx`, `saved.tsx`, `my.tsx`)가 대응하는 화면 컴포넌트를 정상 렌더링하는지 확인
+- [x] `app/(tabs)/_layout.tsx`의 탭 5개(홈/지도/계획/기록/마이) 아이콘·라벨을 FE와 동기화
+- [x] 각 탭 라우트(`index.tsx`, `map.tsx`, `plan.tsx`, `record.tsx`, `my.tsx`)가 대응하는 화면 컴포넌트를 정상 렌더링하는지 확인
 - [ ] 시뮬레이터/디바이스에서 탭 전환 확인
 
 ## Phase 2 — 웹뷰 화면

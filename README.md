@@ -2,7 +2,7 @@
 
 제주 올레길·관광 장소를 위한 React Native(Expo) + WebView 하이브리드 앱입니다.
 
-홈 / 저장 / 마이 탭은 WebView로 웹앱을 로드하고, 지도 탭만 네이티브 네이버맵 SDK로 렌더링합니다.
+홈 / 계획 / 기록 / 마이 탭은 WebView로 웹앱을 로드하고, 지도 탭만 네이티브 네이버맵 SDK로 렌더링합니다.
 
 ## 아키텍처
 
@@ -10,7 +10,8 @@
 스플래시 → 로그인 → 하단 탭
                       ├── 홈   : WebView (/)
                       ├── 지도 : 네이버맵 + 바텀시트
-                      ├── 저장 : WebView (/saved)
+                      ├── 계획 : WebView (/plan)
+                      ├── 기록 : WebView (/record)
                       └── 마이 : WebView (/my)
 ```
 
@@ -33,7 +34,7 @@ src/
 │   ├── index.tsx           # 스플래시
 │   ├── login.tsx           # 로그인
 │   ├── _layout.tsx         # 루트 레이아웃
-│   └── (tabs)/             # 하단 탭 (홈/지도/저장/마이)
+│   └── (tabs)/             # 하단 탭 (홈/지도/계획/기록/마이)
 ├── screens/                # 실제 화면 로직
 ├── components/
 ├── bridge/                 # WebView postMessage 프로토콜
@@ -51,6 +52,7 @@ AGENTS.md                   # Cursor/에이전트 작업 지침
 ### 1. 필수 도구
 
 - Node.js 20+
+- pnpm 10+ (`npm i -g pnpm` 또는 [설치 가이드](https://pnpm.io/installation))
 - Android Studio (Android SDK, NDK)
 - USB 디버깅이 가능한 Android 기기 또는 에뮬레이터
 - (iOS 빌드는 Mac + Xcode 필요)
@@ -80,7 +82,7 @@ NAVER_MAP_CLIENT_ID=발급받은_클라이언트_ID
 ### 4. 의존성 설치
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## 앱 빌드 & 실행
@@ -89,30 +91,30 @@ npm install
 
 ```bash
 # 1) 네이티브 프로젝트 생성 (최초 1회, 또는 app.config.ts / 네이티브 패키지 변경 시)
-npx expo prebuild -p android
+pnpm exec expo prebuild -p android
 
 # 2) SDK 경로 파일이 없으면 생성 (prebuild --clean 후 자주 필요)
 #    android/local.properties
 #    sdk.dir=C:/Users/<유저>/AppData/Local/Android/Sdk
 
 # 3) 빌드 & 기기에 설치
-npx expo run:android
+pnpm exec expo run:android
 # 또는
-npm run android
+pnpm android
 ```
 
 USB로 공기계를 연결했을 때:
 
 ```bash
 adb devices   # device 로 보이는지 확인
-npx expo run:android
+pnpm exec expo run:android
 ```
 
 ### iOS (Mac only)
 
 ```bash
-npx expo prebuild -p ios
-npx expo run:ios
+pnpm exec expo prebuild -p ios
+pnpm exec expo run:ios
 ```
 
 ### 평소 개발 (JS/TS만 수정할 때)
@@ -120,23 +122,23 @@ npx expo run:ios
 앱이 기기에 한 번 설치된 뒤에는 **다시 네이티브 빌드할 필요 없습니다.**
 
 ```bash
-npx expo start --dev-client
+pnpm exec expo start --dev-client
 ```
 
 기기의 제주 길모아 앱을 열고 Metro에 연결하면 Hot Reload로 반영됩니다.
 
 | 상황 | 명령 |
 |---|---|
-| 일상 개발 (화면/로직 수정) | `npx expo start --dev-client` |
-| 네이티브 모듈·`app.config.ts` 변경 후 | `npx expo prebuild` → `npx expo run:android` |
-| 앱 삭제 / 첫 설치 | `npx expo run:android` |
+| 일상 개발 (화면/로직 수정) | `pnpm exec expo start --dev-client` |
+| 네이티브 모듈·`app.config.ts` 변경 후 | `pnpm exec expo prebuild` → `pnpm exec expo run:android` |
+| 앱 삭제 / 첫 설치 | `pnpm exec expo run:android` |
 
 ### Web
 
 지도·네이티브 모듈 때문에 **웹으로는 정상 동작하지 않습니다.** 탭 UI만 빠르게 보고 싶을 때 참고용으로만 사용하세요.
 
 ```bash
-npx expo start --web
+pnpm exec expo start --web
 ```
 
 ## 자주 겪는 빌드 이슈
@@ -163,6 +165,17 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 $env:Path = "$env:JAVA_HOME\bin;" + $env:Path
 java -version   # 21.x 여야 함
 ```
+
+### `ninja: error: manifest 'build.ninja' still dirty` (Windows + Reanimated)
+
+경로가 길거나 Ninja가 오래되면 CMake가 무한 재설정됩니다. 다음을 확인하세요.
+
+1. **Windows 긴 경로 허용** (관리자 PowerShell 한 번):
+   ```powershell
+   New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+   ```
+2. **Ninja 1.12+** — Android SDK의 `cmake\<버전>\bin\ninja.exe`가 1.10.x면 [Ninja 1.12.1](https://github.com/ninja-build/ninja/releases/tag/v1.12.1)로 교체
+3. 그래도 안 되면 프로젝트를 `C:\dev\gilmoa`처럼 **짧은 경로**로 옮기기
 
 ### 네이버맵 Maven `401 Unauthorized` (JitPack)
 
