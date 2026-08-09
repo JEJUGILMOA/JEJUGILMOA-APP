@@ -1,12 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLogo } from '@/components/AppLogo';
@@ -86,26 +80,6 @@ export default function LoginScreen() {
             disabled={isLoading}
           />
         </View>
-
-        <View style={styles.footer}>
-          <Pressable
-            onPress={() => handleSignIn('guest')}
-            disabled={isLoading}
-            style={({ pressed }) => [
-              styles.guestLink,
-              pressed && styles.guestLinkPressed,
-            ]}
-          >
-            {loadingProvider === 'guest' ? (
-              <ActivityIndicator color={LoginColors.subtitle} />
-            ) : (
-              <Text style={styles.guestText}>로그인 없이 둘러보기 &gt;</Text>
-            )}
-          </Pressable>
-          <Text style={styles.legal}>
-            계속 진행 시 이용약관 및 개인정보처리방침에 동의합니다
-          </Text>
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -118,13 +92,12 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     paddingBottom: 12,
-
   },
   inner: {
     flex: 1,
     paddingHorizontal: 24,
     justifyContent: 'space-between',
-    paddingBottom: 24,
+    paddingBottom: 48,
   },
   header: {
     flex: 1,
@@ -156,25 +129,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#4285F4',
-  },
-  footer: {
-    alignItems: 'center',
-    gap: 16,
-  },
-  guestLink: {
-    paddingVertical: 8,
-  },
-  guestLinkPressed: {
-    opacity: 0.6,
-  },
-  guestText: {
-    fontSize: 14,
-    color: LoginColors.subtitle,
-  },
-  legal: {
-    fontSize: 11,
-    color: LoginColors.footer,
-    textAlign: 'center',
-    lineHeight: 16,
   },
 });

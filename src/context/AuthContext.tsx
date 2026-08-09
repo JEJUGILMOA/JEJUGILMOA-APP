@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 
-export type AuthProvider = 'kakao' | 'naver' | 'google' | 'guest';
+export type AuthProvider = 'kakao' | 'naver' | 'google';
 
 export type AuthUser = {
   provider: AuthProvider;
