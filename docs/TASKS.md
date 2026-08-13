@@ -26,10 +26,18 @@
 - [ ] NCP Maps 키 발급
 - [ ] `.env`에 `NAVER_MAP_CLIENT_ID` 등록
 - [ ] `MapScreen`에서 지도 렌더링 확인 (제주 중심)
+- [x] Native 지도 UI 방향 확정 (WebView 오버레이 비사용) — PLAN 결정 기록
+- [x] MAP-01 상단 검색바·모드 칩·카테고리 칩·현위치 FAB
+- [x] 지도 팔레트/모드 토큰 (`src/constants/map.ts`)
 
-## Phase 4 — 바텀시트
-- [ ] `MapBottomSheet` 스냅포인트 동작 확인
-- [ ] 더미 장소 리스트 → 상세 전환 확인
+## Phase 4 — 지도 모드·시트·검색 (MAP-02~07)
+- [x] MAP-04 모드 바텀시트 + 모드 state (`general|plan|activeTrip|heatmap`)
+- [x] MAP-06 장소 상세 시트
+- [x] MAP-07 전체화면 검색 모달
+- [x] MAP-02 계획 지도(순번·점선·요약 시트) 더미
+- [x] MAP-03 진행중 여행(배너·경로·다음장소) 더미
+- [x] MAP-05 히트맵 + 범례 더미
+- [ ] 실기기에서 시트 스냅/제스처 확인
 
 ## Phase 5 — 브릿지
 - [ ] `navigationRef` 유틸 작성
