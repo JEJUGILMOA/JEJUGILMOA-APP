@@ -459,3 +459,174 @@ export function CategoryIcon({
       return <StarIcon color={color} size={size} />;
   }
 }
+
+/** Lucide: car */
+export function CarIcon({ color, size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Path
+        d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="7" cy="17" r="2" stroke={color} strokeWidth={2} />
+      <Path
+        d="M9 17h6"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="17" cy="17" r="2" stroke={color} strokeWidth={2} />
+    </BaseSvg>
+  );
+}
+
+/** Lucide: grip-vertical */
+export function GripVerticalIcon({ color, size = 16 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Circle cx="9" cy="5" r="1" fill={color} stroke={color} strokeWidth={1} />
+      <Circle cx="9" cy="12" r="1" fill={color} stroke={color} strokeWidth={1} />
+      <Circle cx="9" cy="19" r="1" fill={color} stroke={color} strokeWidth={1} />
+      <Circle cx="15" cy="5" r="1" fill={color} stroke={color} strokeWidth={1} />
+      <Circle cx="15" cy="12" r="1" fill={color} stroke={color} strokeWidth={1} />
+      <Circle cx="15" cy="19" r="1" fill={color} stroke={color} strokeWidth={1} />
+    </BaseSvg>
+  );
+}
+
+/** Lucide: menu (햄버거) */
+export function MenuIcon({ color, size = 20 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Path
+        d="M4 5h16"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 12h16"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 19h16"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseSvg>
+  );
+}
+
+/** Lucide: person-standing (도보) */
+export function WalkIcon({ color, size = 14 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Circle cx="12" cy="5" r="1" fill={color} stroke={color} strokeWidth={1} />
+      <Path
+        d="m9 20 3-6 3 6"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="m6 8 6 2 6-2"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 10v4"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseSvg>
+  );
+}
+
+/** Lucide: phone */
+export function PhoneIcon({ color, size = 16 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Path
+        d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseSvg>
+  );
+}
+
+/** Lucide: chevron-down */
+export function ChevronDownIcon({ color, size = 16 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Path
+        d="m6 9 6 6 6-6"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseSvg>
+  );
+}
+
+/** Lucide: share */
+export function ShareIcon({ color, size = 18 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Path
+        d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="m16 6-4-4-4 4"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 2v13"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseSvg>
+  );
+}
+
+/** Lucide: chevron-left */
+export function ChevronLeftIcon({ color, size = 20 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Path
+        d="m15 18-6-6 6-6"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseSvg>
+  );
+}

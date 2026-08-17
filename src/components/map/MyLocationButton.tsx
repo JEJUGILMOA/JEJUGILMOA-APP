@@ -29,7 +29,9 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 16,
-    zIndex: 18,
+    // 바텀시트(계획/상세/모드)보다 아래 — 시트에 가려지도록
+    zIndex: 5,
+    elevation: 2,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -40,6 +42,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
 });

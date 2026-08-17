@@ -43,6 +43,13 @@ export const CATEGORY_CHIPS: ReadonlyArray<{
   { id: 'favorite', label: '즐겨찾기' },
 ];
 
+export const CATEGORY_LABELS: Record<Exclude<PlaceCategory, 'all'>, string> = {
+  food: '맛집',
+  cafe: '카페/체험',
+  spot: '관광지',
+  favorite: '즐겨찾기',
+};
+
 export const JEJU_CENTER = {
   latitude: 33.3846,
   longitude: 126.5535,

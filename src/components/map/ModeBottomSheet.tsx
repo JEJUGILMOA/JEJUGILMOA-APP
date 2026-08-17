@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 
 import { MAP_MODE_OPTIONS, MapTokens, type MapMode } from '../../constants/map';
 import { ModeOptionIcon } from './MapIcons';
@@ -38,6 +42,20 @@ export default function ModeBottomSheet({
     [onClose],
   );
 
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        pressBehavior="close"
+        opacity={0.45}
+        style={[props.style, styles.backdrop]}
+      />
+    ),
+    [],
+  );
+
   if (!visible) {
     return null;
   }
@@ -50,6 +68,7 @@ export default function ModeBottomSheet({
       enablePanDownToClose
       onChange={handleChange}
       onClose={onClose}
+      backdropComponent={renderBackdrop}
       backgroundStyle={styles.sheetBg}
       handleIndicatorStyle={styles.handle}
       style={styles.sheet}
@@ -93,8 +112,12 @@ const styles = StyleSheet.create({
     elevation: 1000,
   },
   sheet: {
-    zIndex: 1000,
-    elevation: 1000,
+    zIndex: 1001,
+    elevation: 1001,
+  },
+  backdrop: {
+    zIndex: 999,
+    elevation: 999,
   },
   sheetBg: {
     backgroundColor: MapTokens.surface,
@@ -109,7 +132,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 24,
   },
-
   title: {
     fontSize: 16,
     fontWeight: '700',

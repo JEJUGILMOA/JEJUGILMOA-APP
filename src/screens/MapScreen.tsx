@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Linking, Platform, Share, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   NaverMapCircleOverlay,
@@ -11,14 +11,19 @@ import {
 
 import CategoryChips from '../components/map/CategoryChips';
 import HeatmapLegend from '../components/map/HeatmapLegend';
+import MapLayersButton from '../components/map/MapLayersButton';
 import MapTopBar from '../components/map/MapTopBar';
 import ModeBottomSheet from '../components/map/ModeBottomSheet';
 import MyLocationButton from '../components/map/MyLocationButton';
-import NextStopCard from '../components/map/NextStopCard';
+import NextStopSheet from '../components/map/NextStopSheet';
+import PathInfoPill from '../components/map/PathInfoPill';
+import PlaceDetailChrome from '../components/map/PlaceDetailChrome';
 import PlaceDetailSheet from '../components/map/PlaceDetailSheet';
-import PlanSummarySheet from '../components/map/PlanSummarySheet';
+import PlanSummaryPanel, {
+  PLAN_PANEL_HEIGHT_RATIO,
+} from '../components/map/PlanSummaryPanel';
 import SearchModal from '../components/map/SearchModal';
-import StatusBanner from '../components/map/StatusBanner';
+import TripProgressBadge from '../components/map/TripProgressBadge';
 import {
   JEJU_CENTER,
   MapTokens,
@@ -26,9 +31,11 @@ import {
   type PlaceCategory,
 } from '../constants/map';
 import {
-  ACTIVE_TRIP_NEXT,
+  ACTIVE_TRIP,
   DUMMY_HEAT_ZONES,
   DUMMY_PLACES,
+  DUMMY_PLAN_LEGS,
+  DUMMY_PLAN_META,
   DUMMY_PLAN_WAYPOINTS,
 } from '../data/mapDummy';
 import type { Place, PlanWaypoint } from '../types/map';
@@ -37,6 +44,15 @@ export type { Place } from '../types/map';
 
 const TOP_BAR_BLOCK = 56;
 const CATEGORY_ROW = 40;
+/** 계획 모드: 지도 영역 비율 (패널과 합쳐 1) */
+const PLAN_MAP_HEIGHT_RATIO = 1 - PLAN_PANEL_HEIGHT_RATIO;
+/** 지점 bounds에 여유를 둬 캡션/마커가 잘리지 않게 함 */
+const PLAN_BOUNDS_PADDING = 0.28;
+const PLAN_BOUNDS_MIN_DELTA = 0.02;
+/** 진행중 여행 다음장소 시트 높이 대략값 — FAB 오프셋용 */
+const ACTIVE_TRIP_SHEET_FAB_OFFSET = 280;
+const ACTIVE_REMAINING_PATH_COLOR = '#5EC4C8';
+const ACTIVE_LOCATION_PULSE = 'rgba(30, 79, 196, 0.18)';
 
 function markerSymbolFor(place: Place): 'green' | 'blue' | 'yellow' | 'red' | 'gray' {
   if (place.isFavorite) {
@@ -64,6 +80,7 @@ export default function MapScreen(): React.JSX.Element {
   const [modeSheetOpen, setModeSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [planWaypoints, setPlanWaypoints] = useState<PlanWaypoint[]>(DUMMY_PLAN_WAYPOINTS);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
   const filteredPlaces = useMemo(() => {
     if (category === 'all') {
@@ -75,14 +92,19 @@ export default function MapScreen(): React.JSX.Element {
     return DUMMY_PLACES.filter((p) => p.category === category);
   }, [category]);
 
-  const searchLabel =
-    mode === 'plan' ? '제주도 3박4일' : '장소, 주소 검색';
+  const searchLabel = '장소, 주소 검색';
 
   const topChromeHeight = insets.top + 8 + TOP_BAR_BLOCK;
   const categoryTop = topChromeHeight;
   const statusTop = topChromeHeight + (mode === 'general' ? CATEGORY_ROW : 8);
-  const bottomChrome =
-    mode === 'plan' || mode === 'activeTrip' ? 88 : 24;
+  const isPlanMode = mode === 'plan';
+  const isActiveTrip = mode === 'activeTrip';
+  /** 현위치 FAB — 모드별 하단 크롬 기준 */
+  const fabBottomOffset = isPlanMode
+    ? 16
+    : isActiveTrip
+      ? ACTIVE_TRIP_SHEET_FAB_OFFSET
+      : 40;
 
   const animateTo = useCallback((latitude: number, longitude: number, zoom = 13) => {
     mapRef.current?.animateCameraTo({
@@ -93,10 +115,91 @@ export default function MapScreen(): React.JSX.Element {
     });
   }, []);
 
+  /** 계획 경유지 전체가 보이도록 Region 맞춤 (south-west + delta) */
+  const fitPlanWaypoints = useCallback((waypoints: PlanWaypoint[]) => {
+    if (waypoints.length === 0) {
+      return;
+    }
+    if (waypoints.length === 1) {
+      const only = waypoints[0];
+      mapRef.current?.animateCameraTo({
+        latitude: only.latitude,
+        longitude: only.longitude,
+        zoom: 13,
+        duration: 500,
+      });
+      return;
+    }
+
+    const lats = waypoints.map((w) => w.latitude);
+    const lngs = waypoints.map((w) => w.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+
+    const rawLatDelta = Math.max(maxLat - minLat, PLAN_BOUNDS_MIN_DELTA);
+    const rawLngDelta = Math.max(maxLng - minLng, PLAN_BOUNDS_MIN_DELTA);
+    const latitudeDelta = rawLatDelta * (1 + PLAN_BOUNDS_PADDING * 2);
+    const longitudeDelta = rawLngDelta * (1 + PLAN_BOUNDS_PADDING * 2);
+
+    mapRef.current?.animateRegionTo({
+      latitude: minLat - rawLatDelta * PLAN_BOUNDS_PADDING,
+      longitude: minLng - rawLngDelta * PLAN_BOUNDS_PADDING,
+      latitudeDelta,
+      longitudeDelta,
+      duration: 500,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isPlanMode) {
+      return;
+    }
+    // 지도 영역 높이(60%) 레이아웃이 잡힌 뒤 bounds를 맞춤
+    const timer = setTimeout(() => {
+      fitPlanWaypoints(planWaypoints);
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [isPlanMode, planWaypoints, fitPlanWaypoints]);
+
+  useEffect(() => {
+    if (!isActiveTrip) {
+      return;
+    }
+    const points = [
+      ...ACTIVE_TRIP.traveledPath,
+      ...ACTIVE_TRIP.remainingPath,
+    ];
+    const timer = setTimeout(() => {
+      fitPlanWaypoints(
+        points.map((p, index) => ({
+          id: `active-${index}`,
+          name: '',
+          latitude: p.latitude,
+          longitude: p.longitude,
+          category: 'spot' as const,
+          order: index + 1,
+        })),
+      );
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [isActiveTrip, fitPlanWaypoints]);
+
   const handleSelectPlace = useCallback(
     (place: Place) => {
       setSelectedPlace(place);
+      setSelectedPlanId(place.id);
       animateTo(place.latitude, place.longitude);
+    },
+    [animateTo],
+  );
+
+  const handleSelectPlanWaypoint = useCallback(
+    (waypoint: PlanWaypoint) => {
+      setSelectedPlanId(waypoint.id);
+      setSelectedPlace(null);
+      animateTo(waypoint.latitude, waypoint.longitude, 13);
     },
     [animateTo],
   );
@@ -106,6 +209,20 @@ export default function MapScreen(): React.JSX.Element {
     // 위치 권한/GPS 미확보 환경에서도 제주 중심으로 폴백
     animateTo(JEJU_CENTER.latitude, JEJU_CENTER.longitude, 12);
   }, [animateTo]);
+
+  const handleToggleMenu = useCallback(() => {
+    setModeSheetOpen((open) => {
+      if (!open) {
+        setSelectedPlace(null);
+      }
+      return !open;
+    });
+  }, []);
+
+  const handleMapPress = useCallback(() => {
+    setModeSheetOpen(false);
+    setSelectedPlace(null);
+  }, []);
 
   const handleAddToCourse = useCallback((place: Place) => {
     setPlanWaypoints((prev) => {
@@ -121,6 +238,44 @@ export default function MapScreen(): React.JSX.Element {
     Alert.alert('코스에 추가됨', `${place.name}을(를) 계획에 넣었습니다.`);
   }, []);
 
+  const handleSetDestination = useCallback(async (place: Place) => {
+    const { latitude, longitude, name } = place;
+    const label = encodeURIComponent(name);
+    const webUrl = `https://map.naver.com/v5/search/${label}`;
+    const appUrl =
+      Platform.OS === 'ios'
+        ? `maps://?daddr=${latitude},${longitude}&dirflg=d`
+        : `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`;
+
+    setSelectedPlace(null);
+    try {
+      const canOpenApp = await Linking.canOpenURL(appUrl);
+      await Linking.openURL(canOpenApp ? appUrl : webUrl);
+    } catch {
+      Alert.alert('목적지로 설정', '지도 앱을 열 수 없어요. 잠시 후 다시 시도해 주세요.');
+    }
+  }, []);
+
+  const handleSharePlace = useCallback(async (place: Place) => {
+    try {
+      await Share.share({
+        message: `${place.name}${place.address ? ` · ${place.address}` : ''}`,
+      });
+    } catch {
+      // 사용자 취소 등
+    }
+  }, []);
+
+  const handleToggleFavorite = useCallback(() => {
+    if (!selectedPlace) {
+      return;
+    }
+    setSelectedPlace({
+      ...selectedPlace,
+      isFavorite: !selectedPlace.isFavorite,
+    });
+  }, [selectedPlace]);
+
   const planCoords = useMemo(
     () =>
       planWaypoints.map((w) => ({
@@ -130,210 +285,240 @@ export default function MapScreen(): React.JSX.Element {
     [planWaypoints],
   );
 
-  const remainingPathCoords = useMemo(
-    () => [
-      { latitude: 33.4996, longitude: 126.5312 },
-      {
-        latitude: ACTIVE_TRIP_NEXT.place.latitude,
-        longitude: ACTIVE_TRIP_NEXT.place.longitude,
-      },
-    ],
-    [],
-  );
-
-  const upcomingPathCoords = useMemo(
-    () => [
-      {
-        latitude: ACTIVE_TRIP_NEXT.place.latitude,
-        longitude: ACTIVE_TRIP_NEXT.place.longitude,
-      },
-      { latitude: 33.3940, longitude: 126.2394 },
-    ],
-    [],
-  );
-
   return (
     <View style={styles.container}>
-      <NaverMapView
-        ref={mapRef}
-        style={styles.map}
-        initialCamera={{ ...JEJU_CENTER, zoom: 10 }}
-        isShowLocationButton={false}
+      <View
+        style={[
+          styles.mapArea,
+          isPlanMode
+            ? { flex: PLAN_MAP_HEIGHT_RATIO }
+            : styles.mapAreaFull,
+        ]}
       >
-        {mode === 'general'
-          ? filteredPlaces.map((place) => (
-              <NaverMapMarkerOverlay
-                key={place.id}
-                latitude={place.latitude}
-                longitude={place.longitude}
-                image={{ symbol: markerSymbolFor(place) }}
-                width={28}
-                height={36}
-                caption={{
-                  text: place.isFavorite ? `★ ${place.name}` : place.name,
-                  textSize: 11,
-                  color: MapTokens.text,
-                  haloColor: '#FFFFFF',
-                }}
-                onTap={() => handleSelectPlace(place)}
-              />
-            ))
-          : null}
+        <NaverMapView
+          ref={mapRef}
+          style={styles.map}
+          initialCamera={{ ...JEJU_CENTER, zoom: 10 }}
+          isShowLocationButton={false}
+          onTapMap={handleMapPress}
+        >
+          {mode === 'general'
+            ? filteredPlaces.map((place) => (
+                <NaverMapMarkerOverlay
+                  key={place.id}
+                  latitude={place.latitude}
+                  longitude={place.longitude}
+                  image={{ symbol: markerSymbolFor(place) }}
+                  width={28}
+                  height={36}
+                  caption={{
+                    text: place.isFavorite ? `★ ${place.name}` : place.name,
+                    textSize: 11,
+                    color: MapTokens.text,
+                    haloColor: '#FFFFFF',
+                  }}
+                  onTap={() => handleSelectPlace(place)}
+                />
+              ))
+            : null}
 
-        {mode === 'plan' ? (
-          <>
-            {/* TODO: 점선 동선 — Polyline `pattern` prop이 현재 SDK에서 네이티브로 전달되지 않음.
-                공식 문서/릴리즈에서 지원되면 pattern 또는 PathOverlay 패턴으로 교체. */}
-            {planCoords.length >= 2 ? (
+          {isPlanMode ? (
+            <>
+              {/* TODO: 실제 도로 경로(Directions) 연동 시 PathOverlay로 교체 */}
+              {planCoords.length >= 2 ? (
+                <NaverMapPolylineOverlay
+                  coords={planCoords}
+                  width={4}
+                  color={MapTokens.blue}
+                  capType="Round"
+                  joinType="Round"
+                />
+              ) : null}
+              {planWaypoints.map((wp) => (
+                <NaverMapMarkerOverlay
+                  key={`plan-${wp.id}`}
+                  latitude={wp.latitude}
+                  longitude={wp.longitude}
+                  image={{ symbol: 'green' }}
+                  width={28}
+                  height={36}
+                  caption={{
+                    text: `${wp.order}. ${wp.name}`,
+                    textSize: 12,
+                    color: MapTokens.text,
+                    haloColor: '#FFFFFF',
+                  }}
+                  onTap={() => handleSelectPlanWaypoint(wp)}
+                />
+              ))}
+            </>
+          ) : null}
+
+          {isActiveTrip ? (
+            <>
+              {/* TODO: Directions API 연동 시 실제 도로 PathOverlay로 교체 */}
               <NaverMapPolylineOverlay
-                coords={planCoords}
-                width={3}
-                color={MapTokens.green}
+                coords={[...ACTIVE_TRIP.traveledPath]}
+                width={5}
+                color={MapTokens.blue}
                 capType="Round"
                 joinType="Round"
               />
-            ) : null}
-            {planWaypoints.map((wp) => (
-              <NaverMapMarkerOverlay
-                key={`plan-${wp.id}`}
-                latitude={wp.latitude}
-                longitude={wp.longitude}
-                image={{ symbol: 'green' }}
-                width={26}
-                height={34}
-                caption={{
-                  text: String(wp.order),
-                  textSize: 12,
-                  color: MapTokens.green,
-                  haloColor: '#FFFFFF',
-                }}
-                onTap={() => handleSelectPlace(wp)}
+              <NaverMapPolylineOverlay
+                coords={[...ACTIVE_TRIP.remainingPath]}
+                width={5}
+                color={ACTIVE_REMAINING_PATH_COLOR}
+                capType="Round"
+                joinType="Round"
               />
-            ))}
-          </>
-        ) : null}
-
-        {mode === 'activeTrip' ? (
-          <>
-            <NaverMapPolylineOverlay
-              coords={remainingPathCoords}
-              width={5}
-              color={MapTokens.blue}
-              capType="Round"
-              joinType="Round"
-            />
-            {/* TODO: 예정 경로 점선 — 현재는 연한 실선으로 구분 */}
-            <NaverMapPolylineOverlay
-              coords={upcomingPathCoords}
-              width={3}
-              color="#8FA8E8"
-              capType="Round"
-              joinType="Round"
-            />
-            <NaverMapMarkerOverlay
-              latitude={remainingPathCoords[0].latitude}
-              longitude={remainingPathCoords[0].longitude}
-              image={{ symbol: 'blue' }}
-              width={24}
-              height={24}
-              caption={{ text: '현위치', textSize: 11, color: MapTokens.blue }}
-            />
-            <NaverMapMarkerOverlay
-              latitude={ACTIVE_TRIP_NEXT.place.latitude}
-              longitude={ACTIVE_TRIP_NEXT.place.longitude}
-              image={{ symbol: 'green' }}
-              width={28}
-              height={36}
-              caption={{
-                text: `${ACTIVE_TRIP_NEXT.distanceMeters}m · ${ACTIVE_TRIP_NEXT.walkMinutes}분`,
-                textSize: 11,
-                color: MapTokens.text,
-                haloColor: '#FFFFFF',
-              }}
-              onTap={() => handleSelectPlace(ACTIVE_TRIP_NEXT.place)}
-            />
-          </>
-        ) : null}
-
-        {mode === 'heatmap'
-          ? DUMMY_HEAT_ZONES.map((zone) => (
               <NaverMapCircleOverlay
-                key={zone.id}
-                latitude={zone.latitude}
-                longitude={zone.longitude}
-                radius={zone.radius}
-                color={
-                  zone.level === 'high' ? 'rgba(232,93,76,0.35)' : 'rgba(245,197,66,0.35)'
-                }
+                latitude={ACTIVE_TRIP.currentLocation.latitude}
+                longitude={ACTIVE_TRIP.currentLocation.longitude}
+                radius={120}
+                color={ACTIVE_LOCATION_PULSE}
                 outlineWidth={0}
               />
-            ))
-          : null}
-
-        {mode === 'heatmap'
-          ? DUMMY_PLACES.filter((p) => p.category === 'spot').map((place) => (
               <NaverMapMarkerOverlay
-                key={`heat-${place.id}`}
-                latitude={place.latitude}
-                longitude={place.longitude}
-                image={{ symbol: 'green' }}
+                latitude={ACTIVE_TRIP.currentLocation.latitude}
+                longitude={ACTIVE_TRIP.currentLocation.longitude}
+                image={{ symbol: 'blue' }}
                 width={22}
-                height={28}
-                onTap={() => handleSelectPlace(place)}
+                height={22}
               />
-            ))
-          : null}
-      </NaverMapView>
+              <NaverMapMarkerOverlay
+                latitude={ACTIVE_TRIP.nextPlace.latitude}
+                longitude={ACTIVE_TRIP.nextPlace.longitude}
+                image={{ symbol: 'green' }}
+                width={28}
+                height={36}
+                caption={{
+                  text: ACTIVE_TRIP.nextPlace.name,
+                  textSize: 12,
+                  color: MapTokens.text,
+                  haloColor: '#FFFFFF',
+                }}
+                onTap={() => handleSelectPlace(ACTIVE_TRIP.nextPlace)}
+              />
+            </>
+          ) : null}
 
-      <MapTopBar
-        searchLabel={searchLabel}
-        onPressSearch={() => setSearchOpen(true)}
-        onPressMode={() => setModeSheetOpen(true)}
+          {mode === 'heatmap'
+            ? DUMMY_HEAT_ZONES.map((zone) => (
+                <NaverMapCircleOverlay
+                  key={zone.id}
+                  latitude={zone.latitude}
+                  longitude={zone.longitude}
+                  radius={zone.radius}
+                  color={
+                    zone.level === 'high' ? 'rgba(232,93,76,0.35)' : 'rgba(245,197,66,0.35)'
+                  }
+                  outlineWidth={0}
+                />
+              ))
+            : null}
+
+          {mode === 'heatmap'
+            ? DUMMY_PLACES.filter((p) => p.category === 'spot').map((place) => (
+                <NaverMapMarkerOverlay
+                  key={`heat-${place.id}`}
+                  latitude={place.latitude}
+                  longitude={place.longitude}
+                  image={{ symbol: 'green' }}
+                  width={22}
+                  height={28}
+                  onTap={() => handleSelectPlace(place)}
+                />
+              ))
+            : null}
+        </NaverMapView>
+
+        {selectedPlace ? (
+          <PlaceDetailChrome
+            isFavorite={selectedPlace.isFavorite}
+            onBack={() => setSelectedPlace(null)}
+            onToggleFavorite={handleToggleFavorite}
+            onShare={() => handleSharePlace(selectedPlace)}
+          />
+        ) : (
+          <MapTopBar
+            searchLabel={searchLabel}
+            onPressSearch={() => setSearchOpen(true)}
+            onPressMenu={handleToggleMenu}
+          />
+        )}
+
+        {mode === 'general' && !selectedPlace ? (
+          <CategoryChips
+            selected={category}
+            onSelect={setCategory}
+            topOffset={categoryTop}
+          />
+        ) : null}
+
+        {isActiveTrip ? (
+          <TripProgressBadge
+            tripTitle={ACTIVE_TRIP.title}
+            currentStop={ACTIVE_TRIP.currentStop}
+            totalStops={ACTIVE_TRIP.totalStops}
+            topOffset={statusTop}
+            onPress={() => setModeSheetOpen(true)}
+          />
+        ) : null}
+
+        {isActiveTrip ? (
+          <PathInfoPill
+            walkMinutes={ACTIVE_TRIP.walkMinutes}
+            distanceMeters={ACTIVE_TRIP.distanceMeters}
+          />
+        ) : null}
+
+        {isActiveTrip ? (
+          <MapLayersButton
+            bottomOffset={fabBottomOffset + 52}
+            onPress={() =>
+              Alert.alert('지도 레이어', '레이어 설정은 곧 연결될 예정이에요.')
+            }
+          />
+        ) : null}
+
+        <MyLocationButton onPress={handleMyLocation} bottomOffset={fabBottomOffset} />
+
+        {mode === 'heatmap' ? <HeatmapLegend bottomOffset={24} /> : null}
+      </View>
+
+      {isPlanMode ? (
+        <View style={[styles.planPanelSlot, { flex: PLAN_PANEL_HEIGHT_RATIO }]}>
+          <PlanSummaryPanel
+            planTitle={DUMMY_PLAN_META.title}
+            durationLabel={DUMMY_PLAN_META.totalDurationLabel}
+            waypoints={planWaypoints}
+            legs={DUMMY_PLAN_LEGS}
+            selectedId={selectedPlanId}
+            onPressWaypoint={handleSelectPlanWaypoint}
+            onPressDetailSchedule={() =>
+              Alert.alert('상세 일정', '상세 일정 화면은 곧 연결될 예정이에요.')
+            }
+          />
+        </View>
+      ) : null}
+
+      <NextStopSheet
+        visible={isActiveTrip}
+        place={ACTIVE_TRIP.nextPlace}
+        walkMinutes={ACTIVE_TRIP.walkMinutes}
+        distanceMeters={ACTIVE_TRIP.distanceMeters}
+        arrivalTimeLabel={ACTIVE_TRIP.arrivalTimeLabel}
+        underOverlay={modeSheetOpen}
+        onPressPlace={() =>
+          animateTo(ACTIVE_TRIP.nextPlace.latitude, ACTIVE_TRIP.nextPlace.longitude, 14)
+        }
       />
-
-      {mode === 'general' ? (
-        <CategoryChips
-          selected={category}
-          onSelect={setCategory}
-          topOffset={categoryTop}
-        />
-      ) : null}
-
-      {mode === 'activeTrip' ? (
-        <StatusBanner
-          topOffset={statusTop}
-          onPressOtherMap={() => setModeSheetOpen(true)}
-          onDismiss={() => setMode('general')}
-        />
-      ) : null}
-
-      <MyLocationButton onPress={handleMyLocation} bottomOffset={bottomChrome + 16} />
-
-      {mode === 'plan' ? (
-        <PlanSummarySheet
-          planTitle="제주 3박4일 계획"
-          waypoints={planWaypoints}
-          onPressWaypoint={(wp) => handleSelectPlace(wp)}
-          bottomOffset={0}
-        />
-      ) : null}
-
-      {mode === 'activeTrip' ? (
-        <NextStopCard
-          place={ACTIVE_TRIP_NEXT.place}
-          distanceMeters={ACTIVE_TRIP_NEXT.distanceMeters}
-          walkMinutes={ACTIVE_TRIP_NEXT.walkMinutes}
-          onPress={() => handleSelectPlace(ACTIVE_TRIP_NEXT.place)}
-          bottomOffset={0}
-        />
-      ) : null}
-
-      {mode === 'heatmap' ? <HeatmapLegend bottomOffset={24} /> : null}
 
       <PlaceDetailSheet
         place={selectedPlace}
         onClose={() => setSelectedPlace(null)}
         onAddToCourse={handleAddToCourse}
+        onSetDestination={handleSetDestination}
       />
 
       <SearchModal
@@ -356,5 +541,21 @@ export default function MapScreen(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: MapTokens.background },
-  map: { flex: 1 },
+  mapArea: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  mapAreaFull: {
+    flex: 1,
+  },
+  map: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  planPanelSlot: {
+    minHeight: 0,
+  },
 });

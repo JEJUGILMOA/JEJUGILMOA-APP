@@ -3,18 +3,18 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapTokens } from '../../constants/map';
-import { LayersIcon, SearchIcon } from './MapIcons';
+import { MenuIcon, SearchIcon } from './MapIcons';
 
 type Props = {
   searchLabel: string;
   onPressSearch: () => void;
-  onPressMode: () => void;
+  onPressMenu: () => void;
 };
 
 export default function MapTopBar({
   searchLabel,
   onPressSearch,
-  onPressMode,
+  onPressMenu,
 }: Props): React.JSX.Element {
   const insets = useSafeAreaInsets();
 
@@ -26,9 +26,13 @@ export default function MapTopBar({
           {searchLabel}
         </Text>
       </Pressable>
-      <Pressable style={styles.mode} onPress={onPressMode} accessibilityRole="button">
-        <LayersIcon color={MapTokens.green} size={16} />
-        <Text style={styles.modeText}>모드</Text>
+      <Pressable
+        style={styles.menu}
+        onPress={onPressMenu}
+        accessibilityRole="button"
+        accessibilityLabel="메뉴"
+      >
+        <MenuIcon color={MapTokens.text} size={20} />
       </Pressable>
     </View>
   );
@@ -66,25 +70,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: MapTokens.textMuted,
   },
-  mode: {
+  menu: {
+    width: 44,
     height: 44,
-    minWidth: 72,
     borderRadius: 12,
     backgroundColor: MapTokens.surface,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    gap: 6,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
-  },
-  modeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: MapTokens.text,
   },
 });
