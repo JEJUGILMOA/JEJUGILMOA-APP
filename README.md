@@ -76,7 +76,7 @@ NAVER_MAP_CLIENT_ID=발급받은_클라이언트_ID
 ```
 
 - [네이버클라우드플랫폼](https://www.ncloud.com) → Maps 상품에서 Client ID 발급
-- 등록 시 Android 패키지명 / iOS Bundle ID는 `app.config.ts` 값과 동일해야 합니다 (`com.yourcompany.jejugilmoa`)
+- 등록 시 Android 패키지명 / iOS Bundle ID는 `app.config.ts` 값과 동일해야 합니다 (`com.gilmoa.jejugilmoa`)
 - `.env`는 git에 올리지 않습니다
 
 ### 4. 의존성 설치
