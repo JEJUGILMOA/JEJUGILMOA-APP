@@ -17,9 +17,10 @@
 - [ ] 시뮬레이터/디바이스에서 탭 전환 확인
 
 ## Phase 2 — 웹뷰 화면
-- [ ] `WebViewScreen` 컴포넌트 작성
+- [x] `WebViewScreen` 컴포넌트 작성
+- [x] `.env`의 `EXPO_PUBLIC_WEB_BASE_URL`로 웹앱 주소 연결
 - [ ] 로딩 인디케이터 확인
-- [ ] 웹앱 dev 서버 URL로 실제 로딩 테스트
+- [ ] 웹앱 배포 URL로 실제 로딩 테스트
 - [ ] 로딩 실패 시 에러 화면(재시도 버튼) 추가
 
 ## Phase 3 — 지도 화면
