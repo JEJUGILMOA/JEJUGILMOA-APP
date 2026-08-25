@@ -5,16 +5,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppLogo } from '@/components/AppLogo';
 import { SocialLoginButton } from '@/components/SocialLoginButton';
+import {
+  AppleIcon,
+  GoogleIcon,
+  KakaoIcon,
+  NaverIcon,
+} from '@/components/SocialProviderIcons';
 import { LoginColors } from '@/constants/login';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-
-function ProviderIcon({ backgroundColor }: { backgroundColor: string }) {
-  return <View style={[styles.providerIcon, { backgroundColor }]} />;
-}
-
-function GoogleIcon() {
-  return <Text style={styles.googleIcon}>G</Text>;
-}
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
@@ -53,9 +51,7 @@ export default function LoginScreen() {
             label="카카오로 시작하기"
             backgroundColor={LoginColors.kakaoYellow}
             textColor={LoginColors.kakaoText}
-            icon={
-              <ProviderIcon backgroundColor={LoginColors.kakaoText} />
-            }
+            icon={<KakaoIcon />}
             onPress={() => handleSignIn('kakao')}
             loading={loadingProvider === 'kakao'}
             disabled={isLoading}
@@ -64,7 +60,7 @@ export default function LoginScreen() {
             label="네이버로 시작하기"
             backgroundColor={LoginColors.naverGreen}
             textColor={LoginColors.white}
-            icon={<ProviderIcon backgroundColor={LoginColors.white} />}
+            icon={<NaverIcon />}
             onPress={() => handleSignIn('naver')}
             loading={loadingProvider === 'naver'}
             disabled={isLoading}
@@ -77,6 +73,15 @@ export default function LoginScreen() {
             icon={<GoogleIcon />}
             onPress={() => handleSignIn('google')}
             loading={loadingProvider === 'google'}
+            disabled={isLoading}
+          />
+          <SocialLoginButton
+            label="Apple로 시작하기"
+            backgroundColor={LoginColors.appleBlack}
+            textColor={LoginColors.white}
+            icon={<AppleIcon />}
+            onPress={() => handleSignIn('apple')}
+            loading={loadingProvider === 'apple'}
             disabled={isLoading}
           />
         </View>
@@ -119,15 +124,5 @@ const styles = StyleSheet.create({
   buttons: {
     gap: 12,
     paddingBottom: 32,
-  },
-  providerIcon: {
-    width: 14,
-    height: 14,
-    borderRadius: 3,
-  },
-  googleIcon: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#4285F4',
   },
 });

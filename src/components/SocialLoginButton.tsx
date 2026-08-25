@@ -42,11 +42,13 @@ export function SocialLoginButton({
       disabled={disabled || loading}
     >
       <View style={styles.content}>
-        <View style={styles.iconSlot}>{icon}</View>
         {loading ? (
           <ActivityIndicator color={textColor} />
         ) : (
-          <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+          <>
+            <View style={styles.iconSlot}>{icon}</View>
+            <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+          </>
         )}
       </View>
     </Pressable>

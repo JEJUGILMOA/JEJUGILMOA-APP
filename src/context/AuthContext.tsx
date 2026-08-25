@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 
-export type AuthProvider = 'kakao' | 'naver' | 'google';
+export type AuthProvider = 'kakao' | 'naver' | 'google' | 'apple';
 
 export type AuthUser = {
   provider: AuthProvider;
@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
 
   const signIn = useCallback(async (provider: AuthProvider) => {
-    // TODO: 카카오/네이버/Google OAuth SDK 연동
+    // TODO: 카카오/네이버/Google/Apple OAuth SDK 연동
     await new Promise((resolve) => setTimeout(resolve, SIGN_IN_DELAY_MS));
     setUser({ provider });
   }, []);
