@@ -3,7 +3,7 @@ import { ConfigContext, ExpoConfig } from 'expo/config';
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: '제주 길모아',
-  slug: 'jeju-gilmoa',
+  slug: 'jejugilmoa-app',
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/images/appicon.png',
@@ -12,6 +12,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     ...config.ios,
     bundleIdentifier: 'com.gilmoa.jejugilmoa',
+    infoPlist: {
+      ...config.ios?.infoPlist,
+      ITSAppUsesNonExemptEncryption: false,
+    },
   },
   android: {
     ...config.android,
@@ -26,6 +30,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     output: 'static',
     favicon: './assets/images/appicon.png',
   },
+  extra: {
+    eas: {
+      projectId: 'eb44153c-2840-49df-b4c4-d4b7e9a9441d',
+    },
+  },
+  owner: 'gilmoa',
   plugins: [
     'expo-router',
     [
