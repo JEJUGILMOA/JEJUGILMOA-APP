@@ -127,7 +127,6 @@ export default function WebViewScreen({ path }: Props) {
       onSetItineraryChrome: (message) => {
         if (!message.visible) {
           setItineraryChrome(HIDDEN_ITINERARY_CHROME);
-          setPlanMap(HIDDEN_MAP);
           setSheetCollapsed(false);
           return;
         }
