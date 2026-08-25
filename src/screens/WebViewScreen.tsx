@@ -43,8 +43,9 @@ const HIDE_WEB_CHROME = `
     '[data-gilmoa-itinerary-zoom]{display:none!important;}',
     '[data-gilmoa-itinerary-float]{display:none!important;}',
     '[data-gilmoa-itinerary-sheet-chrome]{display:none!important;}',
-    'html.gilmoa-native-map,html.gilmoa-native-map body,html.gilmoa-native-map #root,html.gilmoa-native-map [data-gilmoa-shell],html.gilmoa-native-map main{background:transparent!important;}',
-    'html,body,#root,[data-gilmoa-shell],main{height:100%!important;min-height:100%!important;overflow:auto!important;}'
+    'html.gilmoa-native-map,html.gilmoa-native-map body,html.gilmoa-native-map #root,html.gilmoa-native-map [data-gilmoa-shell],html.gilmoa-native-map main{background:transparent!important;height:100%!important;max-height:100%!important;overflow:hidden!important;}',
+    'html.gilmoa-native-map [data-gilmoa-itinerary-sheet-body]{height:100%!important;max-height:100%!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;}',
+    'html,body,#root,[data-gilmoa-shell],main{height:100%!important;min-height:100%!important;}'
   ].join('');
   document.documentElement.appendChild(style);
   true;
@@ -286,6 +287,8 @@ export default function WebViewScreen({ path }: Props) {
           style={[styles.webviewFill, { backgroundColor: itineraryMode ? 'transparent' : '#fff' }]}
           containerStyle={itineraryMode ? styles.webviewContainerTransparent : undefined}
           nestedScrollEnabled
+          scrollEnabled
+          overScrollMode="content"
           source={{ uri }}
           onMessage={onMessage}
           onLoadEnd={onLoadEnd}
