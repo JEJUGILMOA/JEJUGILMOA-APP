@@ -183,6 +183,7 @@ const styles = StyleSheet.create({
   rightText: {
     fontSize: 12,
     color: PageHeaderTokens.muted,
+    paddingRight: 14,
   },
   actionButton: {
     minHeight: PageHeaderTokens.touch,
