@@ -4,3 +4,8 @@ const raw =
   process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim() || 'https://web.jejugilmoa.com';
 
 export const WEB_BASE_URL = raw.replace(/\/$/, '');
+
+const apiRaw =
+  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || 'https://gilmoa-dev.gyeonseo.com';
+
+export const API_BASE_URL = apiRaw.replace(/\/$/, '');

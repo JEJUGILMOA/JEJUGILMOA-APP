@@ -19,6 +19,7 @@ app/_layout.tsx (Stack, GestureHandlerRootView)
 각 결정의 배경은 이전 대화/커밋 로그를 참고. 새로운 아키텍처 결정이 생기면 이 문서에 추가한다.
 
 ## 결정 기록
+- **2026-08 — 백엔드 불변. 로그인·API는 전부 웹.** 앱은 `/login` WebView. 네이티브 소셜 SDK 불필요. `docs/AUTH.md`.
 - **2026-08 — 지도 탭 UI는 풀 네이티브.** 피그마 MAP-01~07(검색·모드시트·상세시트·계획/진행중/히트맵)을 WebView 오버레이 없이 `NaverMap` + RN(`@gorhom/bottom-sheet`)으로 구현. 홈/계획/기록/마이만 WebView. 지도 팔레트: 그린 `#17783C` · 블루 `#1E4FC4` · 앰버 `#F5A623` · 배경 `#F3F4F8`(탭 활성색 `#24B95C`와는 분리).
 - **2026-08 — 하단 탭을 FE와 동기화.** `홈/지도/저장/마이` → `홈/지도/계획/기록/마이`. 저장 탭 제거, `/plan`·`/record` WebView 추가. 활성색 `#24B95C`, Lucide 동일 아이콘.
 - **2026-07 — Expo SDK 57 채택.** 지도(네이버맵 2.x)가 New Architecture를 요구하는데 Expo가 SDK 52부터 New Arch를 기본값으로 쓰므로 궁합이 좋음. 단, SDK 57은 릴리즈 직후라 `@gorhom/bottom-sheet`, `react-native-reanimated`, `react-native-gesture-handler` 등 서드파티 패키지의 호환성 검증 기간이 짧았을 수 있음. 원인 불명의 네이티브 빌드/렌더링 에러가 발생하면 `pnpm exec expo install expo@56 --fix`로 한 단계 내리는 것을 우선 시도해본다.

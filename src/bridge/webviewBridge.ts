@@ -122,6 +122,11 @@ export type WebToNativeMessage =
 
 export type NativeToWebMessage =
   | { type: 'NATIVE_READY'; platform: 'ios' | 'android' }
+  | {
+      type: 'AUTH_TOKEN'
+      accessToken: string
+      user?: { id: string; nickname: string; profileImageUrl?: string }
+    }
   | { type: 'ANDROID_BACK' }
   | { type: 'HEADER_BACK' }
   | { type: 'HEADER_ACTION'; id: string }
