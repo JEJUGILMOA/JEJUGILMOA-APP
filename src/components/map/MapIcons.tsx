@@ -527,6 +527,21 @@ export function MenuIcon({ color, size = 20 }: IconProps): React.JSX.Element {
   );
 }
 
+/** Lucide: check */
+export function CheckIcon({ color, size = 18 }: IconProps): React.JSX.Element {
+  return (
+    <BaseSvg size={size}>
+      <Path
+        d="M20 6 9 17l-5-5"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseSvg>
+  );
+}
+
 /** Lucide: person-standing (도보) */
 export function WalkIcon({ color, size = 14 }: IconProps): React.JSX.Element {
   return (

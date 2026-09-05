@@ -9,29 +9,33 @@ import {
   type NaverMapViewRef,
 } from '@mj-studio/react-native-naver-map';
 
+import ActiveTripEmptySheet from '../components/map/ActiveTripEmptySheet';
+import ActiveTripSheet from '../components/map/ActiveTripSheet';
+import ActiveTripStatusBanner from '../components/map/ActiveTripStatusBanner';
+import BadgeUnlockModal from '../components/map/BadgeUnlockModal';
 import CategoryChips from '../components/map/CategoryChips';
 import HeatmapLegend from '../components/map/HeatmapLegend';
 import MapLayersButton from '../components/map/MapLayersButton';
 import MapTopBar from '../components/map/MapTopBar';
 import ModeBottomSheet from '../components/map/ModeBottomSheet';
 import MyLocationButton from '../components/map/MyLocationButton';
-import NextStopSheet from '../components/map/NextStopSheet';
-import PathInfoPill from '../components/map/PathInfoPill';
 import PlaceDetailChrome from '../components/map/PlaceDetailChrome';
 import PlaceDetailSheet from '../components/map/PlaceDetailSheet';
 import PlanSummaryPanel, {
   PLAN_PANEL_HEIGHT_RATIO,
 } from '../components/map/PlanSummaryPanel';
 import SearchModal from '../components/map/SearchModal';
-import TripProgressBadge from '../components/map/TripProgressBadge';
+import VisitCompleteModal from '../components/map/VisitCompleteModal';
 import {
   JEJU_CENTER,
   MapTokens,
   type MapMode,
   type PlaceCategory,
 } from '../constants/map';
+import { useAuth } from '../context/AuthContext';
 import {
   ACTIVE_TRIP,
+  type ActiveTripStop,
   DUMMY_HEAT_ZONES,
   DUMMY_PLACES,
   DUMMY_PLAN_LEGS,
@@ -39,6 +43,7 @@ import {
   DUMMY_PLAN_WAYPOINTS,
 } from '../data/mapDummy';
 import type { Place, PlanWaypoint } from '../types/map';
+import { ensureMapLocationPermission } from '../utils/mapLocationPermission';
 
 export type { Place } from '../types/map';
 
@@ -49,10 +54,13 @@ const PLAN_MAP_HEIGHT_RATIO = 1 - PLAN_PANEL_HEIGHT_RATIO;
 /** 지점 bounds에 여유를 둬 캡션/마커가 잘리지 않게 함 */
 const PLAN_BOUNDS_PADDING = 0.28;
 const PLAN_BOUNDS_MIN_DELTA = 0.02;
-/** 진행중 여행 다음장소 시트 높이 대략값 — FAB 오프셋용 */
-const ACTIVE_TRIP_SHEET_FAB_OFFSET = 280;
+/** 진행중 여행 시트 높이 대략값 — FAB 오프셋용 */
+const ACTIVE_TRIP_SHEET_FAB_OFFSET = 300;
+const ACTIVE_EMPTY_SHEET_FAB_OFFSET = 260;
 const ACTIVE_REMAINING_PATH_COLOR = '#5EC4C8';
+const ACTIVE_UPCOMING_PATH_COLOR = '#B0B8C8';
 const ACTIVE_LOCATION_PULSE = 'rgba(30, 79, 196, 0.18)';
+const ACTIVE_LOCATION_DOT = MapTokens.blue;
 
 function markerSymbolFor(place: Place): 'green' | 'blue' | 'yellow' | 'red' | 'gray' {
   if (place.isFavorite) {
@@ -70,9 +78,59 @@ function markerSymbolFor(place: Place): 'green' | 'blue' | 'yellow' | 'red' | 'g
   }
 }
 
+function activeTripStopSymbol(
+  status: ActiveTripStop['status'],
+): 'green' | 'gray' | 'lightblue' {
+  switch (status) {
+    case 'visited':
+      return 'gray';
+    case 'current':
+      return 'green';
+    default:
+      return 'lightblue';
+  }
+}
+
+function buildInitialStops(): ActiveTripStop[] {
+  return ACTIVE_TRIP.stops.map((stop) => ({ ...stop, place: { ...stop.place } }));
+}
+
+type MapCoord = { latitude: number; longitude: number };
+
+/** 경유지 순서대로 경로 선분 생성 (지나온/남은/예정) */
+function buildActiveTripPaths(
+  stops: ActiveTripStop[],
+  currentIndex: number,
+  currentLocation: MapCoord,
+): {
+  traveled: MapCoord[];
+  remaining: MapCoord[];
+  upcoming: MapCoord[];
+} {
+  const stopCoords = stops.map((s) => ({
+    latitude: s.place.latitude,
+    longitude: s.place.longitude,
+  }));
+
+  const traveled = [
+    ...stopCoords.slice(0, currentIndex),
+    currentLocation,
+  ];
+
+  const remaining = [currentLocation, stopCoords[currentIndex]!];
+
+  const upcoming =
+    currentIndex < stopCoords.length - 1
+      ? stopCoords.slice(currentIndex)
+      : [];
+
+  return { traveled, remaining, upcoming };
+}
+
 export default function MapScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<NaverMapViewRef>(null);
+  const { isAuthenticated } = useAuth();
 
   const [mode, setMode] = useState<MapMode>('general');
   const [category, setCategory] = useState<PlaceCategory>('all');
@@ -81,6 +139,13 @@ export default function MapScreen(): React.JSX.Element {
   const [searchOpen, setSearchOpen] = useState(false);
   const [planWaypoints, setPlanWaypoints] = useState<PlanWaypoint[]>(DUMMY_PLAN_WAYPOINTS);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+
+  const [tripStops, setTripStops] = useState<ActiveTripStop[]>(buildInitialStops);
+  const [tripCurrentIndex, setTripCurrentIndex] = useState<number>(ACTIVE_TRIP.currentStopIndex);
+  const [tripVisitedCount, setTripVisitedCount] = useState<number>(ACTIVE_TRIP.visitedCount);
+  const [visitModalOpen, setVisitModalOpen] = useState(false);
+  const [badgeModalOpen, setBadgeModalOpen] = useState(false);
+  const [verifiedStop, setVerifiedStop] = useState<ActiveTripStop | null>(null);
 
   const filteredPlaces = useMemo(() => {
     if (category === 'all') {
@@ -99,12 +164,26 @@ export default function MapScreen(): React.JSX.Element {
   const statusTop = topChromeHeight + (mode === 'general' ? CATEGORY_ROW : 8);
   const isPlanMode = mode === 'plan';
   const isActiveTrip = mode === 'activeTrip';
-  /** 현위치 FAB — 모드별 하단 크롬 기준 */
+  const showActiveTripEmpty = isActiveTrip && !isAuthenticated;
+  const showActiveTripLive = isActiveTrip && isAuthenticated;
+
+  const activeTripPaths = useMemo(
+    () =>
+      buildActiveTripPaths(
+        tripStops,
+        tripCurrentIndex,
+        ACTIVE_TRIP.currentLocation,
+      ),
+    [tripStops, tripCurrentIndex],
+  );
+
   const fabBottomOffset = isPlanMode
     ? 16
-    : isActiveTrip
+    : showActiveTripLive
       ? ACTIVE_TRIP_SHEET_FAB_OFFSET
-      : 40;
+      : showActiveTripEmpty
+        ? ACTIVE_EMPTY_SHEET_FAB_OFFSET
+        : 40;
 
   const animateTo = useCallback((latitude: number, longitude: number, zoom = 13) => {
     mapRef.current?.animateCameraTo({
@@ -164,27 +243,22 @@ export default function MapScreen(): React.JSX.Element {
   }, [isPlanMode, planWaypoints, fitPlanWaypoints]);
 
   useEffect(() => {
-    if (!isActiveTrip) {
+    if (!showActiveTripLive) {
       return;
     }
-    const points = [
-      ...ACTIVE_TRIP.traveledPath,
-      ...ACTIVE_TRIP.remainingPath,
-    ];
+    const points = tripStops.map((stop) => ({
+      id: stop.id,
+      name: stop.place.name,
+      latitude: stop.place.latitude,
+      longitude: stop.place.longitude,
+      category: stop.place.category,
+      order: stop.order,
+    }));
     const timer = setTimeout(() => {
-      fitPlanWaypoints(
-        points.map((p, index) => ({
-          id: `active-${index}`,
-          name: '',
-          latitude: p.latitude,
-          longitude: p.longitude,
-          category: 'spot' as const,
-          order: index + 1,
-        })),
-      );
+      fitPlanWaypoints(points);
     }, 180);
     return () => clearTimeout(timer);
-  }, [isActiveTrip, fitPlanWaypoints]);
+  }, [showActiveTripLive, tripStops, fitPlanWaypoints]);
 
   const handleSelectPlace = useCallback(
     (place: Place) => {
@@ -204,11 +278,51 @@ export default function MapScreen(): React.JSX.Element {
     [animateTo],
   );
 
-  const handleMyLocation = useCallback(() => {
+  const handleSelectTripStop = useCallback(
+    (stop: ActiveTripStop, _index: number) => {
+      animateTo(stop.place.latitude, stop.place.longitude, 13);
+    },
+    [animateTo],
+  );
+
+  const handleVerifyVisit = useCallback(() => {
+    const stop = tripStops[tripCurrentIndex];
+    if (!stop) {
+      return;
+    }
+    setVerifiedStop(stop);
+    setVisitModalOpen(true);
+  }, [tripCurrentIndex, tripStops]);
+
+  const handleVisitNextDestination = useCallback(() => {
+    setVisitModalOpen(false);
+    setTripStops((prev) =>
+      prev.map((stop, index) => {
+        if (index === tripCurrentIndex) {
+          return { ...stop, status: 'visited' };
+        }
+        if (index === tripCurrentIndex + 1) {
+          return { ...stop, status: 'current' };
+        }
+        return stop;
+      }),
+    );
+    setTripVisitedCount((count) => Math.min(count + 1, ACTIVE_TRIP.totalStops));
+    setTripCurrentIndex((index) => Math.min(index + 1, tripStops.length - 1));
+    setBadgeModalOpen(true);
+  }, [tripCurrentIndex, tripStops.length]);
+
+  const [userLocationVisible, setUserLocationVisible] = useState(false);
+
+  const handleMyLocation = useCallback(async () => {
+    const granted = await ensureMapLocationPermission();
+    if (!granted) {
+      return;
+    }
+
+    setUserLocationVisible(true);
     mapRef.current?.setLocationTrackingMode('Follow');
-    // 위치 권한/GPS 미확보 환경에서도 제주 중심으로 폴백
-    animateTo(JEJU_CENTER.latitude, JEJU_CENTER.longitude, 12);
-  }, [animateTo]);
+  }, []);
 
   const handleToggleMenu = useCallback(() => {
     setModeSheetOpen((open) => {
@@ -300,6 +414,13 @@ export default function MapScreen(): React.JSX.Element {
           style={styles.map}
           initialCamera={{ ...JEJU_CENTER, zoom: 10 }}
           isShowLocationButton={false}
+          isShowZoomControls={false}
+          locationOverlay={{
+            isVisible: userLocationVisible,
+            circleRadius: 60,
+            circleColor: ACTIVE_LOCATION_PULSE,
+            circleOutlineWidth: 0,
+          }}
           onTapMap={handleMapPress}
         >
           {mode === 'general'
@@ -354,23 +475,36 @@ export default function MapScreen(): React.JSX.Element {
             </>
           ) : null}
 
-          {isActiveTrip ? (
+          {showActiveTripLive ? (
             <>
               {/* TODO: Directions API 연동 시 실제 도로 PathOverlay로 교체 */}
-              <NaverMapPolylineOverlay
-                coords={[...ACTIVE_TRIP.traveledPath]}
-                width={5}
-                color={MapTokens.blue}
-                capType="Round"
-                joinType="Round"
-              />
-              <NaverMapPolylineOverlay
-                coords={[...ACTIVE_TRIP.remainingPath]}
-                width={5}
-                color={ACTIVE_REMAINING_PATH_COLOR}
-                capType="Round"
-                joinType="Round"
-              />
+              {activeTripPaths.traveled.length >= 2 ? (
+                <NaverMapPolylineOverlay
+                  coords={activeTripPaths.traveled}
+                  width={5}
+                  color={MapTokens.blue}
+                  capType="Round"
+                  joinType="Round"
+                />
+              ) : null}
+              {activeTripPaths.remaining.length >= 2 ? (
+                <NaverMapPolylineOverlay
+                  coords={activeTripPaths.remaining}
+                  width={5}
+                  color={ACTIVE_REMAINING_PATH_COLOR}
+                  capType="Round"
+                  joinType="Round"
+                />
+              ) : null}
+              {activeTripPaths.upcoming.length >= 2 ? (
+                <NaverMapPolylineOverlay
+                  coords={activeTripPaths.upcoming}
+                  width={4}
+                  color={ACTIVE_UPCOMING_PATH_COLOR}
+                  capType="Round"
+                  joinType="Round"
+                />
+              ) : null}
               <NaverMapCircleOverlay
                 latitude={ACTIVE_TRIP.currentLocation.latitude}
                 longitude={ACTIVE_TRIP.currentLocation.longitude}
@@ -378,28 +512,49 @@ export default function MapScreen(): React.JSX.Element {
                 color={ACTIVE_LOCATION_PULSE}
                 outlineWidth={0}
               />
-              <NaverMapMarkerOverlay
+              {/* 현위치: 핀 symbol은 정사각형 크기에서 찌그러지므로 원형 오버레이 사용 */}
+              <NaverMapCircleOverlay
                 latitude={ACTIVE_TRIP.currentLocation.latitude}
                 longitude={ACTIVE_TRIP.currentLocation.longitude}
-                image={{ symbol: 'blue' }}
-                width={22}
-                height={22}
+                radius={18}
+                color={ACTIVE_LOCATION_DOT}
+                outlineWidth={3}
+                outlineColor="#FFFFFF"
               />
-              <NaverMapMarkerOverlay
-                latitude={ACTIVE_TRIP.nextPlace.latitude}
-                longitude={ACTIVE_TRIP.nextPlace.longitude}
-                image={{ symbol: 'green' }}
-                width={28}
-                height={36}
-                caption={{
-                  text: ACTIVE_TRIP.nextPlace.name,
-                  textSize: 12,
-                  color: MapTokens.text,
-                  haloColor: '#FFFFFF',
-                }}
-                onTap={() => handleSelectPlace(ACTIVE_TRIP.nextPlace)}
-              />
+              {tripStops.map((stop, index) => {
+                const isCurrent = stop.status === 'current';
+                return (
+                  <NaverMapMarkerOverlay
+                    key={`trip-stop-${stop.id}`}
+                    latitude={stop.place.latitude}
+                    longitude={stop.place.longitude}
+                    image={{ symbol: activeTripStopSymbol(stop.status) }}
+                    width={isCurrent ? 32 : 28}
+                    height={isCurrent ? 40 : 36}
+                    caption={{
+                      text: isCurrent
+                        ? stop.place.name
+                        : `${stop.order}. ${stop.place.name}`,
+                      textSize: isCurrent ? 12 : 11,
+                      color: MapTokens.text,
+                      haloColor: '#FFFFFF',
+                    }}
+                    onTap={() => handleSelectTripStop(stop, index)}
+                  />
+                );
+              })}
             </>
+          ) : null}
+
+          {showActiveTripEmpty ? (
+            <NaverMapCircleOverlay
+              latitude={JEJU_CENTER.latitude}
+              longitude={JEJU_CENTER.longitude}
+              radius={16}
+              color={MapTokens.blue}
+              outlineWidth={2}
+              outlineColor="#FFFFFF"
+            />
           ) : null}
 
           {mode === 'heatmap'
@@ -455,24 +610,15 @@ export default function MapScreen(): React.JSX.Element {
           />
         ) : null}
 
-        {isActiveTrip ? (
-          <TripProgressBadge
-            tripTitle={ACTIVE_TRIP.title}
-            currentStop={ACTIVE_TRIP.currentStop}
-            totalStops={ACTIVE_TRIP.totalStops}
+        {showActiveTripLive ? (
+          <ActiveTripStatusBanner
             topOffset={statusTop}
-            onPress={() => setModeSheetOpen(true)}
+            onPressOtherMap={() => setModeSheetOpen(true)}
+            onDismiss={() => setMode('general')}
           />
         ) : null}
 
-        {isActiveTrip ? (
-          <PathInfoPill
-            walkMinutes={ACTIVE_TRIP.walkMinutes}
-            distanceMeters={ACTIVE_TRIP.distanceMeters}
-          />
-        ) : null}
-
-        {isActiveTrip ? (
+        {showActiveTripLive ? (
           <MapLayersButton
             bottomOffset={fabBottomOffset + 52}
             onPress={() =>
@@ -502,16 +648,48 @@ export default function MapScreen(): React.JSX.Element {
         </View>
       ) : null}
 
-      <NextStopSheet
-        visible={isActiveTrip}
-        place={ACTIVE_TRIP.nextPlace}
-        walkMinutes={ACTIVE_TRIP.walkMinutes}
-        distanceMeters={ACTIVE_TRIP.distanceMeters}
-        arrivalTimeLabel={ACTIVE_TRIP.arrivalTimeLabel}
+      <ActiveTripEmptySheet
+        visible={showActiveTripEmpty}
         underOverlay={modeSheetOpen}
-        onPressPlace={() =>
-          animateTo(ACTIVE_TRIP.nextPlace.latitude, ACTIVE_TRIP.nextPlace.longitude, 14)
+        onGoGeneralMap={() => setMode('general')}
+      />
+
+      <ActiveTripSheet
+        visible={showActiveTripLive}
+        tripTitle={ACTIVE_TRIP.title}
+        dayLabel={ACTIVE_TRIP.dayLabel}
+        visitedCount={tripVisitedCount}
+        totalStops={ACTIVE_TRIP.totalStops}
+        stops={tripStops}
+        currentIndex={tripCurrentIndex}
+        canVerifyVisit={ACTIVE_TRIP.canVerifyVisit}
+        underOverlay={modeSheetOpen}
+        onSelectStop={handleSelectTripStop}
+        onVerifyVisit={handleVerifyVisit}
+      />
+
+      <VisitCompleteModal
+        visible={visitModalOpen && verifiedStop != null}
+        place={verifiedStop?.place ?? ACTIVE_TRIP.nextPlace}
+        verifiedAtLabel="2024.07.21 10:24"
+        orderLabel={`${verifiedStop?.order ?? tripCurrentIndex + 1}번째 목적지`}
+        visitedCount={Math.min(tripVisitedCount + 1, ACTIVE_TRIP.totalStops)}
+        totalStops={ACTIVE_TRIP.totalStops}
+        onAddPhoto={() =>
+          Alert.alert('사진 추가', '사진 추가는 곧 연결될 예정이에요.')
         }
+        onNextDestination={handleVisitNextDestination}
+      />
+
+      <BadgeUnlockModal
+        visible={badgeModalOpen}
+        badge={ACTIVE_TRIP.unlockedBadge}
+        recentLabels={ACTIVE_TRIP.recentBadges.map((b) => b.label)}
+        extraCount={ACTIVE_TRIP.extraBadgeCount}
+        onShare={() => {
+          void Share.share({ message: `배지 획득: ${ACTIVE_TRIP.unlockedBadge.title}` });
+        }}
+        onConfirm={() => setBadgeModalOpen(false)}
       />
 
       <PlaceDetailSheet

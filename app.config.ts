@@ -53,6 +53,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       '@mj-studio/react-native-naver-map',
       {
         client_id: process.env.NAVER_MAP_CLIENT_ID ?? 'YOUR_NAVER_MAP_CLIENT_ID',
+        android: {
+          ACCESS_FINE_LOCATION: true,
+          ACCESS_COARSE_LOCATION: true,
+        },
+        ios: {
+          NSLocationWhenInUseUsageDescription:
+            '주변 장소와 경로 안내를 위해 현재 위치를 사용합니다.',
+          NSLocationAlwaysAndWhenInUseUsageDescription:
+            '주변 장소와 경로 안내를 위해 현재 위치를 사용합니다.',
+        },
       },
     ],
     // 네이버맵 SDK Maven (JitPack 401 방지)

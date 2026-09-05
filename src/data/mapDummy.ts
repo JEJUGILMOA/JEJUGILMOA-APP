@@ -144,30 +144,116 @@ export const DUMMY_RECENT_SEARCHES: string[] = [
   '함덕해수욕장',
 ];
 
+/** MAP-03 진행중 여행 경유지 (캐러셀용) */
+export type ActiveTripStop = {
+  id: string;
+  order: number;
+  place: Place;
+  status: 'visited' | 'current' | 'upcoming';
+  transport: 'car' | 'walk';
+  travelMinutes: number;
+  distanceMeters: number;
+  scheduledTime: string;
+};
+
+export type ActiveTripBadge = {
+  id: string;
+  title: string;
+  description: string;
+  collected: number;
+  total: number;
+};
+
+/** MAP-03 / 03b / 03c 더미 — 로그인 시 진행중 여행 UI */
 export const ACTIVE_TRIP = {
-  title: '제주 동부 여행',
-  currentStop: 2,
-  totalStops: 5,
-  arrivalTimeLabel: '09:30',
-  walkMinutes: 12,
-  distanceMeters: 850,
-  /** 현위치 (더미) */
-  currentLocation: { latitude: 33.4892, longitude: 126.751 },
-  /** 다음 목적지 */
+  title: '제주 3박4일',
+  dayLabel: '2일차',
+  visitedCount: 3,
+  totalStops: 6,
+  /** 현재 목적지(0-based). 4번째 = index 3 */
+  currentStopIndex: 3,
+  /** 더미 GPS: 200m 이내라 방문 인증 가능 — 3→4번 구간(제주시→성산) 중간 */
+  canVerifyVisit: true,
+  walkMinutes: 11,
+  distanceMeters: 350,
+  arrivalTimeLabel: '13:00',
+  currentLocation: { latitude: 33.478, longitude: 126.78 },
   nextPlace: DUMMY_PLACES[2],
-  /**
-   * 지나온 경로(진한 파랑) / 남은 경로(연한 청록)
-   * TODO: Directions API 연동 시 도로 폴리라인으로 교체
-   */
-  traveledPath: [
-    { latitude: 33.4996, longitude: 126.5312 },
-    { latitude: 33.495, longitude: 126.62 },
-    { latitude: 33.4892, longitude: 126.751 },
+  /** 서쪽→시내→동쪽→북동→시내 (지리적으로 이어지는 순서) */
+  stops: [
+    {
+      id: 's1',
+      order: 1,
+      place: DUMMY_PLACES[0],
+      status: 'visited' as const,
+      transport: 'car' as const,
+      travelMinutes: 20,
+      distanceMeters: 12000,
+      scheduledTime: '09:00',
+    },
+    {
+      id: 's2',
+      order: 2,
+      place: DUMMY_PLACES[1],
+      status: 'visited' as const,
+      transport: 'car' as const,
+      travelMinutes: 18,
+      distanceMeters: 14000,
+      scheduledTime: '10:30',
+    },
+    {
+      id: 's3',
+      order: 3,
+      place: DUMMY_PLACES[3],
+      status: 'visited' as const,
+      transport: 'car' as const,
+      travelMinutes: 35,
+      distanceMeters: 28000,
+      scheduledTime: '12:00',
+    },
+    {
+      id: 's4',
+      order: 4,
+      place: DUMMY_PLACES[2],
+      status: 'current' as const,
+      transport: 'car' as const,
+      travelMinutes: 12,
+      distanceMeters: 850,
+      scheduledTime: '13:00',
+    },
+    {
+      id: 's5',
+      order: 5,
+      place: DUMMY_PLACES[4],
+      status: 'upcoming' as const,
+      transport: 'car' as const,
+      travelMinutes: 55,
+      distanceMeters: 38000,
+      scheduledTime: '15:30',
+    },
+    {
+      id: 's6',
+      order: 6,
+      place: DUMMY_PLACES[5],
+      status: 'upcoming' as const,
+      transport: 'walk' as const,
+      travelMinutes: 15,
+      distanceMeters: 900,
+      scheduledTime: '17:30',
+    },
+  ] satisfies ActiveTripStop[],
+  unlockedBadge: {
+    id: 'b-master',
+    title: '제주 마스터',
+    description: '제주에서 5곳 이상 방문 인증',
+    collected: 6,
+    total: 8,
+  } satisfies ActiveTripBadge,
+  recentBadges: [
+    { id: 'rb1', label: '일출' },
+    { id: 'rb2', label: '해변' },
+    { id: 'rb3', label: '카페' },
   ],
-  remainingPath: [
-    { latitude: 33.4892, longitude: 126.751 },
-    { latitude: 33.475, longitude: 126.85 },
-    { latitude: 33.4581, longitude: 126.9425 },
-  ],
+  extraBadgeCount: 3,
 } as const;
 
