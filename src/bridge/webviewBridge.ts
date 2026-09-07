@@ -118,14 +118,31 @@ export type WebToNativeMessage =
       isSelectingDeparture?: boolean;
       nextLabel?: string;
       sheetTitle?: string;
-    };
+    }
+  /** WebView /login 에서 Apple 버튼 → 네이티브 Sign in with Apple 요청 */
+  | { type: 'REQUEST_APPLE_LOGIN' }
+  /** 카카오/네이버/구글 OAuth를 네이티브 스택 새 화면(WebView)으로 연다 */
+  | {
+      type: 'OPEN_OAUTH_LOGIN';
+      url: string;
+      title?: string;
+      provider?: 'kakao' | 'google' | 'naver';
+    }
+  /** 웹 로그인 성공 → 네이티브가 tabs로 전환 */
+  | {
+      type: 'LOGIN_SUCCESS';
+      provider?: 'kakao' | 'google' | 'naver' | 'apple' | 'temp';
+      returnTo?: string;
+    }
+  /** 웹 로그아웃 → 네이티브가 로그인 화면으로 전환 */
+  | { type: 'LOGOUT' };
 
 export type NativeToWebMessage =
   | { type: 'NATIVE_READY'; platform: 'ios' | 'android' }
   | {
-      type: 'AUTH_TOKEN'
-      accessToken: string
-      user?: { id: string; nickname: string; profileImageUrl?: string }
+      type: 'AUTH_TOKEN';
+      accessToken: string;
+      user?: { id: string; nickname: string; profileImageUrl?: string };
     }
   | { type: 'ANDROID_BACK' }
   | { type: 'HEADER_BACK' }
@@ -139,7 +156,20 @@ export type NativeToWebMessage =
   | { type: 'ITINERARY_SEARCH'; query: string }
   | { type: 'ITINERARY_NEXT' }
   | { type: 'ITINERARY_DEPARTURE_CANCEL' }
-  | { type: 'NATIVE_LAYOUT'; screenHeight: number };
+  | { type: 'NATIVE_LAYOUT'; screenHeight: number }
+  /** 같은 탭을 다시 눌렀을 때 웹을 탭 루트 경로로 되돌림 */
+  | { type: 'TAB_POP_TO_ROOT'; path: string }
+  | {
+      type: 'APPLE_CREDENTIAL';
+      identityToken: string;
+      /** BE 검증용 원본 nonce (Apple에는 SHA256 해시만 전달됨) */
+      rawNonce: string;
+      authorizationCode?: string;
+      email?: string;
+      fullName?: { givenName?: string | null; familyName?: string | null };
+    }
+  | { type: 'APPLE_LOGIN_CANCELLED' }
+  | { type: 'APPLE_LOGIN_ERROR'; message: string };
 
 export type HeaderState = {
   visible: boolean;
@@ -158,6 +188,17 @@ export type BridgeHandlers = {
   onSetItineraryChrome?: (
     message: Extract<WebToNativeMessage, { type: 'SET_ITINERARY_CHROME' }>,
   ) => void;
+  onRequestAppleLogin?: () => void;
+  onOpenOAuthLogin?: (payload: {
+    url: string;
+    title?: string;
+    provider?: 'kakao' | 'google' | 'naver';
+  }) => void;
+  onLoginSuccess?: (payload?: {
+    provider?: 'kakao' | 'google' | 'naver' | 'apple' | 'temp';
+    returnTo?: string;
+  }) => void;
+  onLogout?: () => void;
 };
 
 const HIDDEN_PLAN_MAP: PlanMapState = {
@@ -231,6 +272,25 @@ export function handleBridgeMessage(
       break;
     case 'SET_ITINERARY_CHROME':
       handlers?.onSetItineraryChrome?.(message);
+      break;
+    case 'REQUEST_APPLE_LOGIN':
+      handlers?.onRequestAppleLogin?.();
+      break;
+    case 'OPEN_OAUTH_LOGIN':
+      handlers?.onOpenOAuthLogin?.({
+        url: message.url,
+        title: message.title,
+        provider: message.provider,
+      });
+      break;
+    case 'LOGIN_SUCCESS':
+      handlers?.onLoginSuccess?.({
+        provider: message.provider,
+        returnTo: message.returnTo,
+      });
+      break;
+    case 'LOGOUT':
+      handlers?.onLogout?.();
       break;
     default:
       break;

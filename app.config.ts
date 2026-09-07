@@ -12,6 +12,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     ...config.ios,
     bundleIdentifier: 'com.gilmoa.jejugilmoa',
+    usesAppleSignIn: true,
     infoPlist: {
       ...config.ios?.infoPlist,
       ITSAppUsesNonExemptEncryption: false,
@@ -38,6 +39,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   owner: 'gilmoa',
   plugins: [
     'expo-router',
+    'expo-apple-authentication',
     [
       'expo-splash-screen',
       {

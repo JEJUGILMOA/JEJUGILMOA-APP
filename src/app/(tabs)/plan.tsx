@@ -1,5 +1,5 @@
 import WebViewScreen from '@/screens/WebViewScreen';
 
 export default function PlanTab() {
-  return <WebViewScreen path="/plan" />;
+  return <WebViewScreen path="/plan" tabName="plan" />;
 }

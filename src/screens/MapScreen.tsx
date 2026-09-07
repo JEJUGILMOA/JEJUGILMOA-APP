@@ -33,6 +33,7 @@ import {
   type PlaceCategory,
 } from '../constants/map';
 import { useAuth } from '../context/AuthContext';
+import { useTabRepress } from '../hooks/useTabRepress';
 import {
   ACTIVE_TRIP,
   type ActiveTripStop,
@@ -193,6 +194,22 @@ export default function MapScreen(): React.JSX.Element {
       duration: 500,
     });
   }, []);
+
+  useTabRepress(
+    'map',
+    useCallback(() => {
+      setMode('general');
+      setCategory('all');
+      setSelectedPlace(null);
+      setModeSheetOpen(false);
+      setSearchOpen(false);
+      setSelectedPlanId(null);
+      setVisitModalOpen(false);
+      setBadgeModalOpen(false);
+      setVerifiedStop(null);
+      animateTo(JEJU_CENTER.latitude, JEJU_CENTER.longitude, 10);
+    }, [animateTo]),
+  );
 
   /** 계획 경유지 전체가 보이도록 Region 맞춤 (south-west + delta) */
   const fitPlanWaypoints = useCallback((waypoints: PlanWaypoint[]) => {

@@ -14,6 +14,7 @@
 - [x] `app/_layout.tsx`에서 `GestureHandlerRootView`/`SafeAreaProvider` 세팅 확인
 - [x] `app/(tabs)/_layout.tsx`의 탭 5개(홈/지도/계획/기록/마이) 아이콘·라벨을 FE와 동기화
 - [x] 각 탭 라우트(`index.tsx`, `map.tsx`, `plan.tsx`, `record.tsx`, `my.tsx`)가 대응하는 화면 컴포넌트를 정상 렌더링하는지 확인
+- [x] 같은 탭 재탭 시 루트 복귀 (`TAB_POP_TO_ROOT` 브릿지)
 - [ ] 시뮬레이터/디바이스에서 탭 전환 확인
 
 ## Phase 2 — 웹뷰 화면
@@ -54,7 +55,10 @@
 - [x] API 베이스 URL · fetch 클라이언트 골격 (`EXPO_PUBLIC_API_BASE_URL`, `src/api/http.ts`) · 소셜 로그인 설계 (`docs/AUTH.md`)
 - [x] FE axios 기초 (`withCredentials`, envelope unwrap, auth/places API 헬퍼)
 - [x] FE 웹 소셜 로그인 (`/login`, OAuth 콜백, kakao/naver/google)
-- [ ] 소셜 OAuth SDK + `oauth/{provider}/login` 실호출
+- [x] Apple: Native nonce(SHA256→Apple, rawNonce→BE) + WebView 브릿지 (`REQUEST_APPLE_LOGIN` / `APPLE_CREDENTIAL` / `LOGIN_SUCCESS`)
+- [x] 소셜 OAuth를 네이티브 스택 `/oauth` 새 화면으로 분리 (`OPEN_OAUTH_LOGIN`) + 임시 로그인
+- [x] Apple 실로그인: `POST /api/auth/apple/login` (identityToken + rawNonce) 연결
+- [ ] 소셜 OAuth SDK + `oauth/{provider}/login` 실호출 E2E (iOS Apple 실기기 포함)
 - [ ] API 클라이언트 작성
 - [ ] 로딩/에러/빈 상태 UI
 - [ ] 트레일 경로(폴리라인) 데이터 소스 확정

@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { emitTabRepress } from '@/bridge/tabRepress';
 import {
   CalendarDaysIcon,
   HomeIcon,
@@ -16,6 +17,12 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      screenListeners={({ navigation, route }) => ({
+        tabPress: () => {
+          if (!navigation.isFocused()) return;
+          emitTabRepress(route.name);
+        },
+      })}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: TabBarTokens.active,

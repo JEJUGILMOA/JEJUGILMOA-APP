@@ -1,4 +1,4 @@
-우#!/bin/sh
+#!/bin/sh
 # beforeShellExecution 훅: 프로젝트 차원에서 위험한 명령어를 자동 차단합니다.
 # Cursor가 JSON 페이로드를 stdin으로 보내고, 이 스크립트는 stdout으로 JSON을 돌려줍니다.
 # exit 2 = 차단(deny), exit 0 = 통과(allow)

@@ -3,7 +3,9 @@ import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import { router, useFocusEffect } from 'expo-router';
 
+import { setPendingOAuthLaunch } from '../auth/oauthLaunch';
 import {
   handleBridgeMessage,
   HIDDEN_ITINERARY_CHROME,
@@ -25,20 +27,25 @@ import WebDialog, { HIDDEN_WEB_DIALOG } from '../components/WebDialog';
 import WebToast, { HIDDEN_NATIVE_TOAST } from '../components/WebToast';
 import { WEB_BASE_URL } from '../constants/config';
 import { TabBarTokens } from '../constants/tabs';
+import { useAuth } from '../context/AuthContext';
+import { setPendingNativeToast, takePendingNativeToast } from '../nativeToastQueue';
+import { useTabRepress } from '../hooks/useTabRepress';
 
 type Props = {
-  /** 웹앱 내 경로. 예: '/', '/plan', '/record', '/my' */
+  /** 웹앱 내 경로. 예: '/', '/plan', '/record', '/my', '/login' */
   path: string;
+  /** expo-router Tabs route name. 탭이 아니면 생략 */
+  tabName?: string;
 };
 
-/** 네이티브 탭바·페이지 헤더·일정 지도가 있으므로 웹 대응 UI는 숨김 */
+/** 네이티브 탭바·일정 지도가 있으므로 웹 대응 UI는 숨김.
+ * 페이지 헤더는 FE가 라우트 showHeader에 따라 숨김(네이티브 헤더) / 표시(웹 헤더)를 결정한다. */
 const HIDE_WEB_CHROME = `
 (function() {
   var style = document.createElement('style');
   style.setAttribute('data-gilmoa-native', '1');
   style.textContent = [
     'nav[aria-label="하단 내비게이션"]{display:none!important;}',
-    'header[data-gilmoa-page-header]{display:none!important;}',
     '[data-gilmoa-itinerary-map]{display:none!important;}',
     '[data-gilmoa-itinerary-zoom]{display:none!important;}',
     '[data-gilmoa-itinerary-float]{display:none!important;}',
@@ -70,7 +77,8 @@ const HIDDEN_MAP: PlanMapState = {
   webOnTop: false,
 };
 
-export default function WebViewScreen({ path }: Props) {
+export default function WebViewScreen({ path, tabName }: Props) {
+  const { signIn, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const webviewRef = useRef<WebView>(null);
   const itinerarySheetRef = useRef<ItinerarySheetRef>(null);
@@ -85,6 +93,14 @@ export default function WebViewScreen({ path }: Props) {
   const [itineraryChrome, setItineraryChrome] =
     useState<PlanItineraryChromeState>(HIDDEN_ITINERARY_CHROME);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
+
+  // 화면 전환 후 마운트/포커스 시 대기 중인 네이티브 토스트 표시
+  useFocusEffect(
+    useCallback(() => {
+      const pending = takePendingNativeToast();
+      if (pending) setWebToast(pending);
+    }, []),
+  );
 
   const onMessage = useCallback((event: WebViewMessageEvent) => {
     handleBridgeMessage(event.nativeEvent.data, webviewRef.current, {
@@ -142,8 +158,62 @@ export default function WebViewScreen({ path }: Props) {
           sheetTitle: message.sheetTitle ?? prev.sheetTitle,
         }));
       },
+      onRequestAppleLogin: () => {
+        // expo-crypto / Apple Auth는 네이티브 모듈 — 앱 기동 시 import하면
+        // 재빌드 전 바이너리에서 WebView 전체가 깨지므로 요청 시에만 로드한다.
+        void (async () => {
+          try {
+            const { signInWithAppleNative } = await import('../auth/appleAuth');
+            const credential = await signInWithAppleNative();
+            sendToWeb(webviewRef.current, {
+              type: 'APPLE_CREDENTIAL',
+              identityToken: credential.identityToken,
+              rawNonce: credential.rawNonce,
+              authorizationCode: credential.authorizationCode,
+              email: credential.email,
+              fullName: credential.fullName,
+            });
+          } catch (error) {
+            const code =
+              error && typeof error === 'object' && 'code' in error
+                ? String((error as { code?: string }).code)
+                : '';
+            if (code === 'ERR_REQUEST_CANCELED') {
+              sendToWeb(webviewRef.current, { type: 'APPLE_LOGIN_CANCELLED' });
+              return;
+            }
+            const message =
+              error instanceof Error ? error.message : 'Apple 로그인에 실패했습니다.';
+            sendToWeb(webviewRef.current, {
+              type: 'APPLE_LOGIN_ERROR',
+              message,
+            });
+          }
+        })();
+      },
+      onOpenOAuthLogin: ({ url, title }) => {
+        setPendingOAuthLaunch(url, title);
+        router.push({
+          pathname: '/oauth',
+          params: { title: title ?? '로그인' },
+        });
+      },
+      onLoginSuccess: (payload) => {
+        void (async () => {
+          await signIn(payload?.provider ?? 'apple');
+          router.replace('/(tabs)');
+        })();
+      },
+      onLogout: () => {
+        setPendingNativeToast({
+          kind: 'success',
+          message: '로그아웃되었어요.',
+        });
+        signOut();
+        router.replace('/login');
+      },
     });
-  }, []);
+  }, [signIn, signOut]);
 
   const onLoadEnd = useCallback(() => {
     sendToWeb(webviewRef.current, {
@@ -152,9 +222,23 @@ export default function WebViewScreen({ path }: Props) {
     });
   }, []);
 
+  useTabRepress(
+    tabName ?? '',
+    useCallback(() => {
+      if (!tabName) return;
+      sendToWeb(webviewRef.current, { type: 'TAB_POP_TO_ROOT', path });
+    }, [path, tabName]),
+  );
+
   const onBack = useCallback(() => {
+    if (path === '/login') {
+      if (router.canGoBack()) {
+        router.back();
+      }
+      return;
+    }
     sendToWeb(webviewRef.current, { type: 'HEADER_BACK' });
-  }, []);
+  }, [path]);
 
   const onAction = useCallback((id: string) => {
     sendToWeb(webviewRef.current, { type: 'HEADER_ACTION', id });

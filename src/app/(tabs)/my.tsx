@@ -1,5 +1,5 @@
 import WebViewScreen from '@/screens/WebViewScreen';
 
 export default function MyTab() {
-  return <WebViewScreen path="/my" />;
+  return <WebViewScreen path="/my" tabName="my" />;
 }
