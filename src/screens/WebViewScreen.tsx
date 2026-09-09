@@ -30,6 +30,8 @@ import { TabBarTokens } from '../constants/tabs';
 import { useAuth } from '../context/AuthContext';
 import { setPendingNativeToast, takePendingNativeToast } from '../nativeToastQueue';
 import { useTabRepress } from '../hooks/useTabRepress';
+import type { MapBounds } from '../api/map';
+import { JEJU_DEFAULT_BOUNDS } from '../utils/mapBounds';
 
 type Props = {
   /** 웹앱 내 경로. 예: '/', '/plan', '/record', '/my', '/login' */
@@ -71,6 +73,8 @@ const HIDDEN_MAP: PlanMapState = {
   departure: null,
   stops: [],
   unassigned: [],
+  places: [],
+  heatmap: [],
   overlayTop: 120,
   sheetHeight: 0,
   cameraFitKey: undefined,
@@ -93,6 +97,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
   const [itineraryChrome, setItineraryChrome] =
     useState<PlanItineraryChromeState>(HIDDEN_ITINERARY_CHROME);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const lastMapBoundsRef = useRef<MapBounds>(JEJU_DEFAULT_BOUNDS);
 
   // 화면 전환 후 마운트/포커스 시 대기 중인 네이티브 토스트 표시
   useFocusEffect(
@@ -113,6 +118,12 @@ export default function WebViewScreen({ path, tabName }: Props) {
         }
       },
       onMapZoom: (delta) => setZoomPulse((prev) => ({ seq: prev.seq + 1, delta })),
+      onRequestMapRegion: () => {
+        sendToWeb(webviewRef.current, {
+          type: 'MAP_REGION_CHANGED',
+          ...lastMapBoundsRef.current,
+        });
+      },
       onSetModal: (message) => {
         if (!message.visible) {
           setWebDialog((prev) => (message.id && prev.id !== message.id ? prev : HIDDEN_WEB_DIALOG));
@@ -252,6 +263,14 @@ export default function WebViewScreen({ path, tabName }: Props) {
     sendToWeb(webviewRef.current, { type: 'MAP_TAPPED' });
   }, []);
 
+  const onMapRegionChanged = useCallback((bounds: MapBounds) => {
+    lastMapBoundsRef.current = bounds;
+    sendToWeb(webviewRef.current, {
+      type: 'MAP_REGION_CHANGED',
+      ...bounds,
+    });
+  }, []);
+
   const onModalAction = useCallback((id: string) => {
     sendToWeb(webviewRef.current, { type: 'MODAL_ACTION', id });
   }, []);
@@ -353,6 +372,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
             controlsTop={insets.top + 100}
             onAssignPlace={onAssignPlace}
             onTapMap={onTapMap}
+            onRegionChanged={onMapRegionChanged}
           />
         </View>
       ) : null}
@@ -372,6 +392,8 @@ export default function WebViewScreen({ path, tabName }: Props) {
           nestedScrollEnabled
           scrollEnabled
           overScrollMode="content"
+          sharedCookiesEnabled
+          thirdPartyCookiesEnabled
           source={{ uri }}
           onMessage={onMessage}
           onLoadEnd={onLoadEnd}

@@ -50,11 +50,27 @@ export const HIDDEN_ITINERARY_CHROME: PlanItineraryChromeState = {
   sheetTitle: '일정',
 };
 
+export type ExploreMapPlace = MapPin & {
+  categoryName?: string;
+  imageUrl?: string;
+};
+
+export type ExploreHeatmapPoint = {
+  latitude: number;
+  longitude: number;
+  level: 'CROWDED' | 'MODERATE';
+  intensity: number;
+};
+
 export type PlanMapState = {
   visible: boolean;
   departure: MapPin | null;
   stops: PlanMapStop[];
   unassigned: MapPin[];
+  /** 탐색 지도(/map) — API 장소 마커 */
+  places: ExploreMapPlace[];
+  /** 탐색 지도(/map) — 혼잡도 히트맵 */
+  heatmap: ExploreHeatmapPoint[];
   overlayTop: number;
   sheetHeight: number;
   cameraFitKey?: string;
@@ -84,12 +100,15 @@ export type WebToNativeMessage =
       departure?: MapPin | null;
       stops?: PlanMapStop[];
       unassigned?: MapPin[];
+      places?: ExploreMapPlace[];
+      heatmap?: ExploreHeatmapPoint[];
       overlayTop?: number;
       sheetHeight?: number;
       cameraFitKey?: string;
       webOnTop?: boolean;
     }
   | { type: 'MAP_ZOOM'; delta: number }
+  | { type: 'REQUEST_MAP_REGION' }
   | {
       type: 'SET_MODAL';
       visible: boolean;
@@ -149,6 +168,13 @@ export type NativeToWebMessage =
   | { type: 'HEADER_ACTION'; id: string }
   | { type: 'MAP_ASSIGN_PLACE'; id: string }
   | { type: 'MAP_TAPPED' }
+  | {
+      type: 'MAP_REGION_CHANGED';
+      minLat: number;
+      maxLat: number;
+      minLng: number;
+      maxLng: number;
+    }
   | { type: 'MODAL_ACTION'; id: string }
   | { type: 'MODAL_DISMISS' }
   | { type: 'TOAST_ACTION'; id: string }
@@ -183,6 +209,7 @@ export type BridgeHandlers = {
   onSetHeader?: (header: HeaderState) => void;
   onSetMap?: (message: Extract<WebToNativeMessage, { type: 'SET_MAP' }>) => void;
   onMapZoom?: (delta: number) => void;
+  onRequestMapRegion?: () => void;
   onSetModal?: (message: Extract<WebToNativeMessage, { type: 'SET_MODAL' }>) => void;
   onSetToast?: (message: Extract<WebToNativeMessage, { type: 'SET_TOAST' }>) => void;
   onSetItineraryChrome?: (
@@ -206,6 +233,8 @@ const HIDDEN_PLAN_MAP: PlanMapState = {
   departure: null,
   stops: [],
   unassigned: [],
+  places: [],
+  heatmap: [],
   overlayTop: 120,
   sheetHeight: 0,
   cameraFitKey: undefined,
@@ -222,6 +251,8 @@ export function mergePlanMap(
     departure: message.departure !== undefined ? message.departure : prev.departure,
     stops: message.stops ?? prev.stops,
     unassigned: message.unassigned ?? prev.unassigned,
+    places: message.places ?? prev.places,
+    heatmap: message.heatmap ?? prev.heatmap,
     overlayTop: message.overlayTop ?? prev.overlayTop,
     sheetHeight: message.sheetHeight ?? prev.sheetHeight,
     cameraFitKey: message.cameraFitKey ?? prev.cameraFitKey,
@@ -263,6 +294,9 @@ export function handleBridgeMessage(
       break;
     case 'MAP_ZOOM':
       handlers?.onMapZoom?.(message.delta);
+      break;
+    case 'REQUEST_MAP_REGION':
+      handlers?.onRequestMapRegion?.();
       break;
     case 'SET_MODAL':
       handlers?.onSetModal?.(message);

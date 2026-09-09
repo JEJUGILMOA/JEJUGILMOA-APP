@@ -2,14 +2,17 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import {
+  NaverMapCircleOverlay,
   NaverMapMarkerOverlay,
   NaverMapPolylineOverlay,
   NaverMapView,
   type NaverMapViewRef,
 } from '@mj-studio/react-native-naver-map';
 
-import { JEJU_CENTER, MapTokens } from '../../constants/map';
+import type { MapBounds } from '../../api/map';
 import type { PlanMapState } from '../../bridge/webviewBridge';
+import { JEJU_CENTER, MapTokens } from '../../constants/map';
+import { boundsFromRegion } from '../../utils/mapBounds';
 
 type Props = {
   map: PlanMapState;
@@ -17,6 +20,7 @@ type Props = {
   controlsTop?: number;
   onAssignPlace?: (id: string) => void;
   onTapMap?: () => void;
+  onRegionChanged?: (bounds: MapBounds) => void;
 };
 
 export default function PlanItineraryMap({
@@ -25,6 +29,7 @@ export default function PlanItineraryMap({
   controlsTop = 8,
   onAssignPlace,
   onTapMap,
+  onRegionChanged,
 }: Props): React.JSX.Element {
   const zoomRef = useRef(10);
   const centerRef = useRef<{ latitude: number; longitude: number }>({
@@ -58,6 +63,8 @@ export default function PlanItineraryMap({
     return points;
   }, [map.departure, map.stops]);
 
+  const showExploreOverlays = map.places.length > 0 || map.heatmap.length > 0;
+
   useEffect(() => {
     if (!map.visible) {
       fittedKeyRef.current = null;
@@ -71,6 +78,7 @@ export default function PlanItineraryMap({
       ...(map.departure ? [map.departure] : []),
       ...map.stops,
       ...map.unassigned,
+      ...map.places,
     ];
     if (pins.length === 0) {
       zoomRef.current = 10;
@@ -108,7 +116,14 @@ export default function PlanItineraryMap({
       longitudeDelta: lngDelta,
       duration: 400,
     });
-  }, [map.visible, map.cameraFitKey, map.departure, map.stops, map.unassigned]);
+  }, [
+    map.visible,
+    map.cameraFitKey,
+    map.departure,
+    map.stops,
+    map.unassigned,
+    map.places,
+  ]);
 
   useEffect(() => {
     if (!zoomPulse || zoomPulse.seq === 0) return;
@@ -125,6 +140,9 @@ export default function PlanItineraryMap({
         isShowZoomControls={false}
         isUseTextureViewAndroid
         onTapMap={() => onTapMap?.()}
+        onCameraIdle={(params) => {
+          onRegionChanged?.(boundsFromRegion(params.region));
+        }}
       >
         {routeCoords.length >= 2 ? (
           <NaverMapPolylineOverlay
@@ -135,6 +153,43 @@ export default function PlanItineraryMap({
             joinType="Round"
           />
         ) : null}
+
+        {showExploreOverlays
+          ? map.heatmap.map((point, index) => (
+              <NaverMapCircleOverlay
+                key={`heat-${index}-${point.latitude}-${point.longitude}`}
+                latitude={point.latitude}
+                longitude={point.longitude}
+                radius={Math.round(500 + Math.max(0, Math.min(1, point.intensity)) * 1500)}
+                color={
+                  point.level === 'CROWDED'
+                    ? 'rgba(232,93,76,0.35)'
+                    : 'rgba(245,197,66,0.35)'
+                }
+                outlineWidth={0}
+              />
+            ))
+          : null}
+
+        {showExploreOverlays
+          ? map.places.map((place) => (
+              <NaverMapMarkerOverlay
+                key={`p-${place.id}`}
+                latitude={place.latitude}
+                longitude={place.longitude}
+                image={{ symbol: 'green' }}
+                width={28}
+                height={36}
+                caption={{
+                  text: place.title,
+                  textSize: 11,
+                  color: MapTokens.text,
+                  haloColor: '#FFFFFF',
+                }}
+                onTap={() => onAssignPlace?.(place.id)}
+              />
+            ))
+          : null}
 
         {map.unassigned.map((place) => (
           <NaverMapMarkerOverlay

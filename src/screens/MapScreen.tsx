@@ -9,6 +9,7 @@ import {
   type NaverMapViewRef,
 } from '@mj-studio/react-native-naver-map';
 
+import { fetchMapHeatmap, fetchMapPlaces, type MapBounds } from '../api/map';
 import ActiveTripEmptySheet from '../components/map/ActiveTripEmptySheet';
 import ActiveTripSheet from '../components/map/ActiveTripSheet';
 import ActiveTripStatusBanner from '../components/map/ActiveTripStatusBanner';
@@ -37,14 +38,23 @@ import { useTabRepress } from '../hooks/useTabRepress';
 import {
   ACTIVE_TRIP,
   type ActiveTripStop,
-  DUMMY_HEAT_ZONES,
-  DUMMY_PLACES,
   DUMMY_PLAN_LEGS,
   DUMMY_PLAN_META,
   DUMMY_PLAN_WAYPOINTS,
 } from '../data/mapDummy';
-import type { Place, PlanWaypoint } from '../types/map';
+import type { HeatZone, Place, PlanWaypoint } from '../types/map';
+import {
+  boundsFromRegion,
+  boundsKey,
+  JEJU_DEFAULT_BOUNDS,
+  roundBounds,
+} from '../utils/mapBounds';
 import { ensureMapLocationPermission } from '../utils/mapLocationPermission';
+import {
+  mapHeatmapDtoToZone,
+  mapPlaceDtoToPlace,
+  PLACE_CATEGORY_API_NAME,
+} from '../utils/mapMappers';
 
 export type { Place } from '../types/map';
 
@@ -62,6 +72,9 @@ const ACTIVE_REMAINING_PATH_COLOR = '#5EC4C8';
 const ACTIVE_UPCOMING_PATH_COLOR = '#B0B8C8';
 const ACTIVE_LOCATION_PULSE = 'rgba(30, 79, 196, 0.18)';
 const ACTIVE_LOCATION_DOT = MapTokens.blue;
+const MAP_REGION_DEBOUNCE_MS = 400;
+const MAP_PLACES_LIMIT = 200;
+const MAP_HEATMAP_GRID = 10;
 
 function markerSymbolFor(place: Place): 'green' | 'blue' | 'yellow' | 'red' | 'gray' {
   if (place.isFavorite) {
@@ -148,15 +161,99 @@ export default function MapScreen(): React.JSX.Element {
   const [badgeModalOpen, setBadgeModalOpen] = useState(false);
   const [verifiedStop, setVerifiedStop] = useState<ActiveTripStop | null>(null);
 
+  const [mapBounds, setMapBounds] = useState<MapBounds>(JEJU_DEFAULT_BOUNDS);
+  const [debouncedBounds, setDebouncedBounds] = useState<MapBounds>(() =>
+    roundBounds(JEJU_DEFAULT_BOUNDS),
+  );
+  const [mapPlaces, setMapPlaces] = useState<Place[]>([]);
+  const [heatZones, setHeatZones] = useState<HeatZone[]>([]);
+  const placesRequestKeyRef = useRef<string>('');
+  const heatmapRequestKeyRef = useRef<string>('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedBounds(roundBounds(mapBounds));
+    }, MAP_REGION_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [mapBounds]);
+
+  useEffect(() => {
+    if (mode !== 'general' && mode !== 'heatmap') {
+      return;
+    }
+
+    const apiCategory =
+      category === 'all' || category === 'favorite'
+        ? undefined
+        : PLACE_CATEGORY_API_NAME[category];
+    const requestKey = `${boundsKey(debouncedBounds)}:${apiCategory ?? 'all'}`;
+    placesRequestKeyRef.current = requestKey;
+    const controller = new AbortController();
+
+    void (async () => {
+      try {
+        const rows = await fetchMapPlaces(
+          {
+            ...debouncedBounds,
+            category: apiCategory,
+            limit: MAP_PLACES_LIMIT,
+          },
+          { signal: controller.signal },
+        );
+        if (placesRequestKeyRef.current !== requestKey) return;
+        setMapPlaces((prev) => {
+          const favoriteIds = new Set(prev.filter((p) => p.isFavorite).map((p) => p.id));
+          return rows.map((row) => {
+            const place = mapPlaceDtoToPlace(row);
+            return favoriteIds.has(place.id)
+              ? { ...place, isFavorite: true }
+              : place;
+          });
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn('[map] places fetch failed', error);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [debouncedBounds, category, mode]);
+
+  useEffect(() => {
+    if (mode !== 'heatmap') {
+      return;
+    }
+
+    const requestKey = boundsKey(debouncedBounds);
+    heatmapRequestKeyRef.current = requestKey;
+    const controller = new AbortController();
+
+    void (async () => {
+      try {
+        const rows = await fetchMapHeatmap(
+          {
+            ...debouncedBounds,
+            gridSize: MAP_HEATMAP_GRID,
+          },
+          { signal: controller.signal },
+        );
+        if (heatmapRequestKeyRef.current !== requestKey) return;
+        setHeatZones(rows.map(mapHeatmapDtoToZone));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn('[map] heatmap fetch failed', error);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [debouncedBounds, mode]);
+
   const filteredPlaces = useMemo(() => {
-    if (category === 'all') {
-      return DUMMY_PLACES;
-    }
     if (category === 'favorite') {
-      return DUMMY_PLACES.filter((p) => p.isFavorite);
+      return mapPlaces.filter((p) => p.isFavorite);
     }
-    return DUMMY_PLACES.filter((p) => p.category === category);
-  }, [category]);
+    return mapPlaces;
+  }, [category, mapPlaces]);
 
   const searchLabel = '장소, 주소 검색';
 
@@ -401,11 +498,33 @@ export default function MapScreen(): React.JSX.Element {
     if (!selectedPlace) {
       return;
     }
+    const nextFavorite = !selectedPlace.isFavorite;
     setSelectedPlace({
       ...selectedPlace,
-      isFavorite: !selectedPlace.isFavorite,
+      isFavorite: nextFavorite,
     });
+    setMapPlaces((prev) =>
+      prev.map((place) =>
+        place.id === selectedPlace.id
+          ? { ...place, isFavorite: nextFavorite }
+          : place,
+      ),
+    );
   }, [selectedPlace]);
+
+  const handleCameraIdle = useCallback(
+    (params: {
+      region: {
+        latitude: number;
+        longitude: number;
+        latitudeDelta: number;
+        longitudeDelta: number;
+      };
+    }) => {
+      setMapBounds(boundsFromRegion(params.region));
+    },
+    [],
+  );
 
   const planCoords = useMemo(
     () =>
@@ -439,6 +558,7 @@ export default function MapScreen(): React.JSX.Element {
             circleOutlineWidth: 0,
           }}
           onTapMap={handleMapPress}
+          onCameraIdle={handleCameraIdle}
         >
           {mode === 'general'
             ? filteredPlaces.map((place) => (
@@ -575,7 +695,7 @@ export default function MapScreen(): React.JSX.Element {
           ) : null}
 
           {mode === 'heatmap'
-            ? DUMMY_HEAT_ZONES.map((zone) => (
+            ? heatZones.map((zone) => (
                 <NaverMapCircleOverlay
                   key={zone.id}
                   latitude={zone.latitude}
@@ -590,7 +710,7 @@ export default function MapScreen(): React.JSX.Element {
             : null}
 
           {mode === 'heatmap'
-            ? DUMMY_PLACES.filter((p) => p.category === 'spot').map((place) => (
+            ? mapPlaces.map((place) => (
                 <NaverMapMarkerOverlay
                   key={`heat-${place.id}`}
                   latitude={place.latitude}
@@ -718,7 +838,7 @@ export default function MapScreen(): React.JSX.Element {
 
       <SearchModal
         visible={searchOpen}
-        places={DUMMY_PLACES}
+        places={mapPlaces}
         onClose={() => setSearchOpen(false)}
         onSelectPlace={handleSelectPlace}
       />

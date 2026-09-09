@@ -1,6 +1,6 @@
-import type { HeatZone, Place, PlanTravelLeg, PlanWaypoint } from '../types/map';
+import type { Place, PlanTravelLeg, PlanWaypoint } from '../types/map';
 
-/** Phase 6 API 연동 전 더미 데이터 (제주 일대) */
+/** 계획/진행중 여행 모드용 더미 (탐색 마커·히트맵은 API 사용) */
 export const DUMMY_PLACES: Place[] = [
   {
     id: 'p1',
@@ -105,37 +105,6 @@ export const DUMMY_PLAN_META = {
   title: '제주 3박 4일',
   totalDurationLabel: '약 2시간 30분 소요',
 } as const;
-
-export const DUMMY_HEAT_ZONES: HeatZone[] = [
-  {
-    id: 'h1',
-    latitude: 33.4996,
-    longitude: 126.5312,
-    radius: 1200,
-    level: 'high',
-  },
-  {
-    id: 'h2',
-    latitude: 33.4581,
-    longitude: 126.9425,
-    radius: 1500,
-    level: 'high',
-  },
-  {
-    id: 'h3',
-    latitude: 33.3940,
-    longitude: 126.2394,
-    radius: 1000,
-    level: 'medium',
-  },
-  {
-    id: 'h4',
-    latitude: 33.2539,
-    longitude: 126.5600,
-    radius: 900,
-    level: 'medium',
-  },
-];
 
 export const DUMMY_RECENT_SEARCHES: string[] = [
   '협재해변',
