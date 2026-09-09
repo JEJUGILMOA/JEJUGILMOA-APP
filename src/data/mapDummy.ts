@@ -106,12 +106,35 @@ export const DUMMY_PLAN_META = {
   totalDurationLabel: '약 2시간 30분 소요',
 } as const;
 
-export const DUMMY_RECENT_SEARCHES: string[] = [
-  '협재해변',
-  '오설록',
-  '성산일출봉',
-  '함덕해수욕장',
+/** API 실패·미로그인 시 계획 지도 목록 폴백 */
+export const DUMMY_PLAN_SUMMARIES = [
+  {
+    planId: -1,
+    title: '제주 3박 4일',
+    startDate: '2024-07-20',
+    endDate: '2024-07-23',
+    status: 'DRAFT' as const,
+    waypointCount: DUMMY_PLAN_WAYPOINTS.length,
+    nights: 3,
+    days: 4,
+    dDay: 12,
+  },
+  {
+    planId: -2,
+    title: '제주 힐링 2박',
+    startDate: '2024-08-01',
+    endDate: '2024-08-03',
+    status: 'DRAFT' as const,
+    waypointCount: 3,
+    nights: 2,
+    days: 3,
+    dDay: 24,
+  },
 ];
+
+export const DUMMY_PLAN_WAYPOINTS_SHORT = DUMMY_PLAN_WAYPOINTS.slice(0, 3);
+
+export const DUMMY_PLAN_LEGS_SHORT = DUMMY_PLAN_LEGS.slice(0, 2);
 
 /** MAP-03 진행중 여행 경유지 (캐러셀용) */
 export type ActiveTripStop = {

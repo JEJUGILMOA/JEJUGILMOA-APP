@@ -1,9 +1,9 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CATEGORY_LABELS, MapTokens } from '../../constants/map';
 import type { PlanTravelLeg, PlanWaypoint } from '../../types/map';
-import { CarIcon } from './MapIcons';
+import { CarIcon, ChevronLeftIcon } from './MapIcons';
 
 /** 계획 지도에서 하단 패널이 차지하는 화면 높이 비율 */
 export const PLAN_PANEL_HEIGHT_RATIO = 0.4;
@@ -14,6 +14,8 @@ type Props = {
   waypoints: PlanWaypoint[];
   legs: PlanTravelLeg[];
   selectedId: string | null;
+  loading?: boolean;
+  onPressBack?: () => void;
   onPressWaypoint: (waypoint: PlanWaypoint) => void;
   onPressDetailSchedule: () => void;
 };
@@ -32,6 +34,8 @@ export default function PlanSummaryPanel({
   waypoints,
   legs = [],
   selectedId,
+  loading = false,
+  onPressBack,
   onPressWaypoint,
   onPressDetailSchedule,
 }: Props): React.JSX.Element {
@@ -39,7 +43,22 @@ export default function PlanSummaryPanel({
     <View style={styles.panel}>
       <View style={styles.header}>
         <View style={styles.headerTexts}>
-          <Text style={styles.title}>{planTitle}</Text>
+          <View style={styles.titleRow}>
+            {onPressBack ? (
+              <Pressable
+                onPress={onPressBack}
+                hitSlop={8}
+                style={styles.backButton}
+                accessibilityRole="button"
+                accessibilityLabel="계획 목록으로"
+              >
+                <ChevronLeftIcon color={MapTokens.text} size={22} />
+              </Pressable>
+            ) : null}
+            <Text style={styles.title} numberOfLines={1}>
+              {planTitle}
+            </Text>
+          </View>
           <Text style={styles.summary}>
             {waypoints.length}개 장소 · {durationLabel}
           </Text>
@@ -49,6 +68,13 @@ export default function PlanSummaryPanel({
         </Pressable>
       </View>
 
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color={MapTokens.green} />
+        </View>
+      ) : null}
+
+      {!loading ? (
       <ScrollView
         style={styles.list}
         contentContainerStyle={styles.scrollContent}
@@ -99,6 +125,7 @@ export default function PlanSummaryPanel({
           );
         })}
       </ScrollView>
+      ) : null}
     </View>
   );
 }
@@ -126,11 +153,29 @@ const styles = StyleSheet.create({
   headerTexts: {
     flex: 1,
     gap: 4,
+    minWidth: 0,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    minWidth: 0,
+  },
+  backButton: {
+    marginLeft: -4,
+    marginRight: 2,
+    paddingVertical: 2,
   },
   title: {
+    flexShrink: 1,
     fontSize: 17,
     fontWeight: '700',
     color: MapTokens.text,
+  },
+  loadingBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   summary: {
     fontSize: 13,

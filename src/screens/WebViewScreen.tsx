@@ -29,6 +29,7 @@ import { WEB_BASE_URL } from '../constants/config';
 import { TabBarTokens } from '../constants/tabs';
 import { useAuth } from '../context/AuthContext';
 import { setPendingNativeToast, takePendingNativeToast } from '../nativeToastQueue';
+import { takePendingWebPath } from '../pendingWebPath';
 import { useTabRepress } from '../hooks/useTabRepress';
 import type { MapBounds } from '../api/map';
 import { JEJU_DEFAULT_BOUNDS } from '../utils/mapBounds';
@@ -88,7 +89,8 @@ export default function WebViewScreen({ path, tabName }: Props) {
   const itinerarySheetRef = useRef<ItinerarySheetRef>(null);
   const sheetPosition = useSharedValue(0);
   const isItinerarySV = useSharedValue(0);
-  const uri = useMemo(() => `${WEB_BASE_URL}${path}`, [path]);
+  const [activePath, setActivePath] = useState(path);
+  const uri = useMemo(() => `${WEB_BASE_URL}${activePath}`, [activePath]);
   const [header, setHeader] = useState<HeaderState>(HIDDEN_HEADER);
   const [planMap, setPlanMap] = useState<PlanMapState>(HIDDEN_MAP);
   const [zoomPulse, setZoomPulse] = useState({ seq: 0, delta: 0 });
@@ -99,12 +101,26 @@ export default function WebViewScreen({ path, tabName }: Props) {
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const lastMapBoundsRef = useRef<MapBounds>(JEJU_DEFAULT_BOUNDS);
 
-  // 화면 전환 후 마운트/포커스 시 대기 중인 네이티브 토스트 표시
+  useEffect(() => {
+    setActivePath(path);
+  }, [path]);
+
+  // 화면 전환 후 마운트/포커스 시 대기 중인 네이티브 토스트·딥링크
   useFocusEffect(
     useCallback(() => {
-      const pending = takePendingNativeToast();
-      if (pending) setWebToast(pending);
-    }, []),
+      const pendingToast = takePendingNativeToast();
+      if (pendingToast) setWebToast(pendingToast);
+
+      if (!tabName) return;
+      const pendingPath = takePendingWebPath(tabName);
+      if (pendingPath) {
+        setActivePath(pendingPath);
+        setHeader(HIDDEN_HEADER);
+        setPlanMap(HIDDEN_MAP);
+        setItineraryChrome(HIDDEN_ITINERARY_CHROME);
+        setSheetCollapsed(false);
+      }
+    }, [tabName]),
   );
 
   const onMessage = useCallback((event: WebViewMessageEvent) => {
@@ -237,19 +253,20 @@ export default function WebViewScreen({ path, tabName }: Props) {
     tabName ?? '',
     useCallback(() => {
       if (!tabName) return;
+      setActivePath(path);
       sendToWeb(webviewRef.current, { type: 'TAB_POP_TO_ROOT', path });
     }, [path, tabName]),
   );
 
   const onBack = useCallback(() => {
-    if (path === '/login') {
+    if (path === '/login' || activePath === '/login') {
       if (router.canGoBack()) {
         router.back();
       }
       return;
     }
     sendToWeb(webviewRef.current, { type: 'HEADER_BACK' });
-  }, [path]);
+  }, [activePath, path]);
 
   const onAction = useCallback((id: string) => {
     sendToWeb(webviewRef.current, { type: 'HEADER_ACTION', id });
@@ -395,6 +412,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           source={{ uri }}
+          key={uri}
           onMessage={onMessage}
           onLoadEnd={onLoadEnd}
           startInLoadingState={!itineraryMode}

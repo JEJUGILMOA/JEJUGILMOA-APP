@@ -8,13 +8,24 @@ import {
   NaverMapView,
   type NaverMapViewRef,
 } from '@mj-studio/react-native-naver-map';
+import { router } from 'expo-router';
 
 import { fetchMapHeatmap, fetchMapPlaces, type MapBounds } from '../api/map';
+import { fetchPlaceById } from '../api/places';
+import {
+  fetchPlanById,
+  fetchPlanSummaries,
+  type TravelPlanSummary,
+} from '../api/plans';
 import ActiveTripEmptySheet from '../components/map/ActiveTripEmptySheet';
 import ActiveTripSheet from '../components/map/ActiveTripSheet';
 import ActiveTripStatusBanner from '../components/map/ActiveTripStatusBanner';
 import BadgeUnlockModal from '../components/map/BadgeUnlockModal';
 import CategoryChips from '../components/map/CategoryChips';
+import CategoryMapPin, {
+  CATEGORY_PIN_SELECTED_SIZE,
+  CATEGORY_PIN_SIZE,
+} from '../components/map/CategoryMapPin';
 import HeatmapLegend from '../components/map/HeatmapLegend';
 import MapLayersButton from '../components/map/MapLayersButton';
 import MapTopBar from '../components/map/MapTopBar';
@@ -22,9 +33,13 @@ import ModeBottomSheet from '../components/map/ModeBottomSheet';
 import MyLocationButton from '../components/map/MyLocationButton';
 import PlaceDetailChrome from '../components/map/PlaceDetailChrome';
 import PlaceDetailSheet from '../components/map/PlaceDetailSheet';
+import PlanListPanel, {
+  PLAN_LIST_PANEL_HEIGHT_RATIO,
+} from '../components/map/PlanListPanel';
 import PlanSummaryPanel, {
   PLAN_PANEL_HEIGHT_RATIO,
 } from '../components/map/PlanSummaryPanel';
+import SearchHereButton from '../components/map/SearchHereButton';
 import SearchModal from '../components/map/SearchModal';
 import VisitCompleteModal from '../components/map/VisitCompleteModal';
 import {
@@ -39,15 +54,27 @@ import {
   ACTIVE_TRIP,
   type ActiveTripStop,
   DUMMY_PLAN_LEGS,
+  DUMMY_PLAN_LEGS_SHORT,
   DUMMY_PLAN_META,
+  DUMMY_PLAN_SUMMARIES,
   DUMMY_PLAN_WAYPOINTS,
+  DUMMY_PLAN_WAYPOINTS_SHORT,
 } from '../data/mapDummy';
-import type { HeatZone, Place, PlanWaypoint } from '../types/map';
+import { setPendingWebPath } from '../pendingWebPath';
+import type { HeatZone, Place, PlanTravelLeg, PlanWaypoint } from '../types/map';
 import {
+  formatPlanDurationLabel,
+  mapPlanDetailToWaypoints,
+  placeDetailToLookup,
+  type PlaceCoordLookup,
+} from '../utils/planMapMappers';
+import {
+  boundsEqual,
   boundsFromRegion,
   boundsKey,
   JEJU_DEFAULT_BOUNDS,
   roundBounds,
+  shrinkBounds,
 } from '../utils/mapBounds';
 import { ensureMapLocationPermission } from '../utils/mapLocationPermission';
 import {
@@ -60,8 +87,6 @@ export type { Place } from '../types/map';
 
 const TOP_BAR_BLOCK = 56;
 const CATEGORY_ROW = 40;
-/** 계획 모드: 지도 영역 비율 (패널과 합쳐 1) */
-const PLAN_MAP_HEIGHT_RATIO = 1 - PLAN_PANEL_HEIGHT_RATIO;
 /** 지점 bounds에 여유를 둬 캡션/마커가 잘리지 않게 함 */
 const PLAN_BOUNDS_PADDING = 0.28;
 const PLAN_BOUNDS_MIN_DELTA = 0.02;
@@ -72,24 +97,14 @@ const ACTIVE_REMAINING_PATH_COLOR = '#5EC4C8';
 const ACTIVE_UPCOMING_PATH_COLOR = '#B0B8C8';
 const ACTIVE_LOCATION_PULSE = 'rgba(30, 79, 196, 0.18)';
 const ACTIVE_LOCATION_DOT = MapTokens.blue;
-const MAP_REGION_DEBOUNCE_MS = 400;
-const MAP_PLACES_LIMIT = 200;
+/** 한 번에 가져올 장소 수 (화면이 과밀해지지 않도록) */
+const MAP_PLACES_LIMIT = 25;
+/** 지도 화면 가운데 기준으로 검색할 영역 비율 */
+const SEARCH_BOUNDS_RATIO = 0.55;
 const MAP_HEATMAP_GRID = 10;
 
-function markerSymbolFor(place: Place): 'green' | 'blue' | 'yellow' | 'red' | 'gray' {
-  if (place.isFavorite) {
-    return 'yellow';
-  }
-  switch (place.category) {
-    case 'food':
-      return 'red';
-    case 'cafe':
-      return 'blue';
-    case 'spot':
-      return 'green';
-    default:
-      return 'gray';
-  }
+function toSearchArea(bounds: MapBounds): MapBounds {
+  return roundBounds(shrinkBounds(bounds, SEARCH_BOUNDS_RATIO));
 }
 
 function activeTripStopSymbol(
@@ -144,6 +159,7 @@ function buildActiveTripPaths(
 export default function MapScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<NaverMapViewRef>(null);
+  const skipPlanEnterResetRef = useRef(false);
   const { isAuthenticated } = useAuth();
 
   const [mode, setMode] = useState<MapMode>('general');
@@ -151,7 +167,17 @@ export default function MapScreen(): React.JSX.Element {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [modeSheetOpen, setModeSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [planWaypoints, setPlanWaypoints] = useState<PlanWaypoint[]>(DUMMY_PLAN_WAYPOINTS);
+  const [planView, setPlanView] = useState<'list' | 'detail'>('list');
+  const [planSummaries, setPlanSummaries] = useState<TravelPlanSummary[]>([]);
+  const [planListLoading, setPlanListLoading] = useState(false);
+  const [planDetailLoading, setPlanDetailLoading] = useState(false);
+  const [selectedTravelPlan, setSelectedTravelPlan] =
+    useState<TravelPlanSummary | null>(null);
+  const [planWaypoints, setPlanWaypoints] = useState<PlanWaypoint[]>([]);
+  const [planLegs, setPlanLegs] = useState<PlanTravelLeg[]>([]);
+  const [planDurationLabel, setPlanDurationLabel] = useState<string>(
+    DUMMY_PLAN_META.totalDurationLabel,
+  );
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
   const [tripStops, setTripStops] = useState<ActiveTripStop[]>(buildInitialStops);
@@ -161,23 +187,29 @@ export default function MapScreen(): React.JSX.Element {
   const [badgeModalOpen, setBadgeModalOpen] = useState(false);
   const [verifiedStop, setVerifiedStop] = useState<ActiveTripStop | null>(null);
 
-  const [mapBounds, setMapBounds] = useState<MapBounds>(JEJU_DEFAULT_BOUNDS);
-  const [debouncedBounds, setDebouncedBounds] = useState<MapBounds>(() =>
-    roundBounds(JEJU_DEFAULT_BOUNDS),
-  );
+  const [viewBounds, setViewBounds] = useState<MapBounds>(JEJU_DEFAULT_BOUNDS);
+  const [searchBounds, setSearchBounds] = useState<MapBounds | null>(null);
   const [mapPlaces, setMapPlaces] = useState<Place[]>([]);
   const [heatZones, setHeatZones] = useState<HeatZone[]>([]);
   const placesRequestKeyRef = useRef<string>('');
   const heatmapRequestKeyRef = useRef<string>('');
 
+  const liveSearchArea = useMemo(() => toSearchArea(viewBounds), [viewBounds]);
+
+  // 최초 1회: 현재 영역으로 검색 시작
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedBounds(roundBounds(mapBounds));
-    }, MAP_REGION_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [mapBounds]);
+    if (searchBounds) return;
+    setSearchBounds(liveSearchArea);
+  }, [searchBounds, liveSearchArea]);
+
+  const showSearchHere =
+    (mode === 'general' || mode === 'heatmap') &&
+    !selectedPlace &&
+    searchBounds != null &&
+    !boundsEqual(searchBounds, liveSearchArea);
 
   useEffect(() => {
+    if (!searchBounds) return;
     if (mode !== 'general' && mode !== 'heatmap') {
       return;
     }
@@ -186,7 +218,7 @@ export default function MapScreen(): React.JSX.Element {
       category === 'all' || category === 'favorite'
         ? undefined
         : PLACE_CATEGORY_API_NAME[category];
-    const requestKey = `${boundsKey(debouncedBounds)}:${apiCategory ?? 'all'}`;
+    const requestKey = `${boundsKey(searchBounds)}:${apiCategory ?? 'all'}`;
     placesRequestKeyRef.current = requestKey;
     const controller = new AbortController();
 
@@ -194,7 +226,7 @@ export default function MapScreen(): React.JSX.Element {
       try {
         const rows = await fetchMapPlaces(
           {
-            ...debouncedBounds,
+            ...searchBounds,
             category: apiCategory,
             limit: MAP_PLACES_LIMIT,
           },
@@ -217,14 +249,15 @@ export default function MapScreen(): React.JSX.Element {
     })();
 
     return () => controller.abort();
-  }, [debouncedBounds, category, mode]);
+  }, [searchBounds, category, mode]);
 
   useEffect(() => {
+    if (!searchBounds) return;
     if (mode !== 'heatmap') {
       return;
     }
 
-    const requestKey = boundsKey(debouncedBounds);
+    const requestKey = boundsKey(searchBounds);
     heatmapRequestKeyRef.current = requestKey;
     const controller = new AbortController();
 
@@ -232,7 +265,7 @@ export default function MapScreen(): React.JSX.Element {
       try {
         const rows = await fetchMapHeatmap(
           {
-            ...debouncedBounds,
+            ...searchBounds,
             gridSize: MAP_HEATMAP_GRID,
           },
           { signal: controller.signal },
@@ -246,7 +279,7 @@ export default function MapScreen(): React.JSX.Element {
     })();
 
     return () => controller.abort();
-  }, [debouncedBounds, mode]);
+  }, [searchBounds, mode]);
 
   const filteredPlaces = useMemo(() => {
     if (category === 'favorite') {
@@ -261,9 +294,17 @@ export default function MapScreen(): React.JSX.Element {
   const categoryTop = topChromeHeight;
   const statusTop = topChromeHeight + (mode === 'general' ? CATEGORY_ROW : 8);
   const isPlanMode = mode === 'plan';
+  const isPlanDetail = isPlanMode && planView === 'detail';
   const isActiveTrip = mode === 'activeTrip';
   const showActiveTripEmpty = isActiveTrip && !isAuthenticated;
   const showActiveTripLive = isActiveTrip && isAuthenticated;
+
+  const planPanelRatio = isPlanMode
+    ? planView === 'detail'
+      ? PLAN_PANEL_HEIGHT_RATIO
+      : PLAN_LIST_PANEL_HEIGHT_RATIO
+    : PLAN_PANEL_HEIGHT_RATIO;
+  const planMapRatio = 1 - planPanelRatio;
 
   const activeTripPaths = useMemo(
     () =>
@@ -300,6 +341,10 @@ export default function MapScreen(): React.JSX.Element {
       setSelectedPlace(null);
       setModeSheetOpen(false);
       setSearchOpen(false);
+      setPlanView('list');
+      setSelectedTravelPlan(null);
+      setPlanWaypoints([]);
+      setPlanLegs([]);
       setSelectedPlanId(null);
       setVisitModalOpen(false);
       setBadgeModalOpen(false);
@@ -307,6 +352,46 @@ export default function MapScreen(): React.JSX.Element {
       animateTo(JEJU_CENTER.latitude, JEJU_CENTER.longitude, 10);
     }, [animateTo]),
   );
+
+  /** 계획 모드 진입 시 목록으로 리셋 + 내 계획 조회 */
+  useEffect(() => {
+    if (mode !== 'plan') {
+      return;
+    }
+
+    if (skipPlanEnterResetRef.current) {
+      skipPlanEnterResetRef.current = false;
+      return;
+    }
+
+    setPlanView('list');
+    setSelectedTravelPlan(null);
+    setPlanWaypoints([]);
+    setPlanLegs([]);
+    setSelectedPlanId(null);
+    setSelectedPlace(null);
+
+    const controller = new AbortController();
+    setPlanListLoading(true);
+
+    void (async () => {
+      try {
+        const list = await fetchPlanSummaries({ signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setPlanSummaries(list);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn('[map] plan list fetch failed', error);
+        setPlanSummaries(DUMMY_PLAN_SUMMARIES);
+      } finally {
+        if (!controller.signal.aborted) {
+          setPlanListLoading(false);
+        }
+      }
+    })();
+
+    return () => controller.abort();
+  }, [mode]);
 
   /** 계획 경유지 전체가 보이도록 Region 맞춤 (south-west + delta) */
   const fitPlanWaypoints = useCallback((waypoints: PlanWaypoint[]) => {
@@ -346,15 +431,15 @@ export default function MapScreen(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (!isPlanMode) {
+    if (!isPlanDetail) {
       return;
     }
-    // 지도 영역 높이(60%) 레이아웃이 잡힌 뒤 bounds를 맞춤
+    // 지도 영역 높이 레이아웃이 잡힌 뒤 bounds를 맞춤
     const timer = setTimeout(() => {
       fitPlanWaypoints(planWaypoints);
     }, 180);
     return () => clearTimeout(timer);
-  }, [isPlanMode, planWaypoints, fitPlanWaypoints]);
+  }, [isPlanDetail, planWaypoints, fitPlanWaypoints]);
 
   useEffect(() => {
     if (!showActiveTripLive) {
@@ -391,6 +476,95 @@ export default function MapScreen(): React.JSX.Element {
     },
     [animateTo],
   );
+
+  const handleBackToPlanList = useCallback(() => {
+    setPlanView('list');
+    setSelectedTravelPlan(null);
+    setPlanWaypoints([]);
+    setPlanLegs([]);
+    setSelectedPlanId(null);
+    setPlanDetailLoading(false);
+  }, []);
+
+  const handleSelectTravelPlan = useCallback(
+    async (plan: TravelPlanSummary) => {
+      setSelectedTravelPlan(plan);
+      setPlanView('detail');
+      setSelectedPlanId(null);
+      setPlanDurationLabel(formatPlanDurationLabel(plan.nights, plan.days));
+      setPlanDetailLoading(true);
+
+      // 더미(음수 id) — API 없이 즉시 표시
+      if (plan.planId < 0) {
+        if (plan.planId === -2) {
+          setPlanWaypoints(DUMMY_PLAN_WAYPOINTS_SHORT);
+          setPlanLegs(DUMMY_PLAN_LEGS_SHORT);
+        } else {
+          setPlanWaypoints(DUMMY_PLAN_WAYPOINTS);
+          setPlanLegs(DUMMY_PLAN_LEGS);
+        }
+        setPlanDetailLoading(false);
+        return;
+      }
+
+      try {
+        const detail = await fetchPlanById(plan.planId);
+        const placeIds = [
+          ...new Set(
+            (detail.itinerary ?? []).flatMap((day) =>
+              (day.waypoints ?? []).map((wp) => wp.placeId),
+            ),
+          ),
+        ];
+
+        const lookup = new Map<string, PlaceCoordLookup>();
+        await Promise.all(
+          placeIds.map(async (placeId) => {
+            try {
+              const dto = await fetchPlaceById(placeId);
+              const coords = placeDetailToLookup(dto);
+              if (coords) lookup.set(String(placeId), coords);
+            } catch (error) {
+              console.warn('[map] place coord fetch failed', placeId, error);
+            }
+          }),
+        );
+
+        const waypoints = mapPlanDetailToWaypoints(detail, lookup);
+        setPlanWaypoints(waypoints);
+        setPlanLegs([]);
+        setPlanDurationLabel(
+          formatPlanDurationLabel(detail.nights, detail.days),
+        );
+        if (waypoints.length === 0) {
+          Alert.alert(
+            '표시할 장소가 없어요',
+            '이 계획에 좌표가 있는 경유지가 없습니다.',
+          );
+        }
+      } catch (error) {
+        console.warn('[map] plan detail fetch failed', error);
+        Alert.alert(
+          '계획을 불러오지 못했어요',
+          '잠시 후 다시 시도해 주세요.',
+        );
+        handleBackToPlanList();
+      } finally {
+        setPlanDetailLoading(false);
+      }
+    },
+    [handleBackToPlanList],
+  );
+
+  const handleOpenDetailSchedule = useCallback(() => {
+    const planId = selectedTravelPlan?.planId;
+    if (planId != null && planId > 0) {
+      setPendingWebPath('plan', `/plan/${planId}/preview`);
+    } else {
+      setPendingWebPath('plan', '/plan');
+    }
+    router.navigate('/(tabs)/plan');
+  }, [selectedTravelPlan?.planId]);
 
   const handleSelectTripStop = useCallback(
     (stop: ActiveTripStop, _index: number) => {
@@ -461,7 +635,22 @@ export default function MapScreen(): React.JSX.Element {
       const nextOrder = prev.length + 1;
       return [...prev, { ...place, order: nextOrder }];
     });
+    setPlanLegs([]);
+    setSelectedTravelPlan({
+      planId: -1,
+      title: '편집 중 계획',
+      startDate: '',
+      endDate: '',
+      status: 'DRAFT',
+      waypointCount: 0,
+      nights: 0,
+      days: 1,
+      dDay: 0,
+    });
+    setPlanDurationLabel('편집 중');
+    setPlanView('detail');
     setSelectedPlace(null);
+    skipPlanEnterResetRef.current = true;
     setMode('plan');
     Alert.alert('코스에 추가됨', `${place.name}을(를) 계획에 넣었습니다.`);
   }, []);
@@ -521,10 +710,17 @@ export default function MapScreen(): React.JSX.Element {
         longitudeDelta: number;
       };
     }) => {
-      setMapBounds(boundsFromRegion(params.region));
+      setViewBounds(boundsFromRegion(params.region));
     },
     [],
   );
+
+  const handleSearchHere = useCallback(() => {
+    setSearchBounds(liveSearchArea);
+  }, [liveSearchArea]);
+
+  const searchHereTop =
+    topChromeHeight + (mode === 'general' ? CATEGORY_ROW : 8) + 8;
 
   const planCoords = useMemo(
     () =>
@@ -541,7 +737,7 @@ export default function MapScreen(): React.JSX.Element {
         style={[
           styles.mapArea,
           isPlanMode
-            ? { flex: PLAN_MAP_HEIGHT_RATIO }
+            ? { flex: planMapRatio }
             : styles.mapAreaFull,
         ]}
       >
@@ -561,26 +757,41 @@ export default function MapScreen(): React.JSX.Element {
           onCameraIdle={handleCameraIdle}
         >
           {mode === 'general'
-            ? filteredPlaces.map((place) => (
-                <NaverMapMarkerOverlay
-                  key={place.id}
-                  latitude={place.latitude}
-                  longitude={place.longitude}
-                  image={{ symbol: markerSymbolFor(place) }}
-                  width={28}
-                  height={36}
-                  caption={{
-                    text: place.isFavorite ? `★ ${place.name}` : place.name,
-                    textSize: 11,
-                    color: MapTokens.text,
-                    haloColor: '#FFFFFF',
-                  }}
-                  onTap={() => handleSelectPlace(place)}
-                />
-              ))
+            ? filteredPlaces.map((place) => {
+                const selected = selectedPlace?.id === place.id;
+                const pinSize = selected
+                  ? CATEGORY_PIN_SELECTED_SIZE
+                  : CATEGORY_PIN_SIZE;
+                return (
+                  <NaverMapMarkerOverlay
+                    key={place.id}
+                    latitude={place.latitude}
+                    longitude={place.longitude}
+                    width={pinSize}
+                    height={pinSize}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                    zIndex={selected ? 10 : 1}
+                    caption={{
+                      text: place.name,
+                      textSize: selected ? 12 : 11,
+                      color: MapTokens.text,
+                      haloColor: '#FFFFFF',
+                    }}
+                    onTap={() => handleSelectPlace(place)}
+                  >
+                    <CategoryMapPin
+                      key={`${place.id}/${place.category}/${place.isFavorite ? 1 : 0}/${selected ? 1 : 0}`}
+                      category={place.category}
+                      isFavorite={place.isFavorite}
+                      size={CATEGORY_PIN_SIZE}
+                      selected={selected}
+                    />
+                  </NaverMapMarkerOverlay>
+                );
+              })
             : null}
 
-          {isPlanMode ? (
+          {isPlanDetail ? (
             <>
               {/* TODO: 실제 도로 경로(Directions) 연동 시 PathOverlay로 교체 */}
               {planCoords.length >= 2 ? (
@@ -715,11 +926,23 @@ export default function MapScreen(): React.JSX.Element {
                   key={`heat-${place.id}`}
                   latitude={place.latitude}
                   longitude={place.longitude}
-                  image={{ symbol: 'green' }}
-                  width={22}
-                  height={28}
+                  width={24}
+                  height={24}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  caption={{
+                    text: place.name,
+                    textSize: 10,
+                    color: MapTokens.text,
+                    haloColor: '#FFFFFF',
+                  }}
                   onTap={() => handleSelectPlace(place)}
-                />
+                >
+                  <CategoryMapPin
+                    key={`heat-${place.id}/${place.category}`}
+                    category={place.category}
+                    size={24}
+                  />
+                </NaverMapMarkerOverlay>
               ))
             : null}
         </NaverMapView>
@@ -747,6 +970,10 @@ export default function MapScreen(): React.JSX.Element {
           />
         ) : null}
 
+        {showSearchHere ? (
+          <SearchHereButton onPress={handleSearchHere} topOffset={searchHereTop} />
+        ) : null}
+
         {showActiveTripLive ? (
           <ActiveTripStatusBanner
             topOffset={statusTop}
@@ -770,18 +997,28 @@ export default function MapScreen(): React.JSX.Element {
       </View>
 
       {isPlanMode ? (
-        <View style={[styles.planPanelSlot, { flex: PLAN_PANEL_HEIGHT_RATIO }]}>
-          <PlanSummaryPanel
-            planTitle={DUMMY_PLAN_META.title}
-            durationLabel={DUMMY_PLAN_META.totalDurationLabel}
-            waypoints={planWaypoints}
-            legs={DUMMY_PLAN_LEGS}
-            selectedId={selectedPlanId}
-            onPressWaypoint={handleSelectPlanWaypoint}
-            onPressDetailSchedule={() =>
-              Alert.alert('상세 일정', '상세 일정 화면은 곧 연결될 예정이에요.')
-            }
-          />
+        <View style={[styles.planPanelSlot, { flex: planPanelRatio }]}>
+          {planView === 'list' ? (
+            <PlanListPanel
+              plans={planSummaries}
+              loading={planListLoading}
+              onSelectPlan={(plan) => {
+                void handleSelectTravelPlan(plan);
+              }}
+            />
+          ) : (
+            <PlanSummaryPanel
+              planTitle={selectedTravelPlan?.title ?? DUMMY_PLAN_META.title}
+              durationLabel={planDurationLabel}
+              waypoints={planWaypoints}
+              legs={planLegs}
+              selectedId={selectedPlanId}
+              loading={planDetailLoading}
+              onPressBack={handleBackToPlanList}
+              onPressWaypoint={handleSelectPlanWaypoint}
+              onPressDetailSchedule={handleOpenDetailSchedule}
+            />
+          )}
         </View>
       ) : null}
 

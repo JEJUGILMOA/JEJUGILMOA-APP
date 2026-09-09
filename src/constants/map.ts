@@ -27,7 +27,7 @@ export const MAP_MODE_OPTIONS: ReadonlyArray<{
   description: string;
 }> = [
   { id: 'general', title: '일반 지도', description: '주변 장소 탐색' },
-  { id: 'plan', title: '계획 지도', description: '제주 3박4일 계획 표시' },
+  { id: 'plan', title: '계획 지도', description: '내 여행 계획을 지도에 표시' },
   { id: 'activeTrip', title: '진행중 여행', description: '실시간 경로 안내' },
   { id: 'heatmap', title: '인기 지역', description: '혼잡도 히트맵' },
 ];

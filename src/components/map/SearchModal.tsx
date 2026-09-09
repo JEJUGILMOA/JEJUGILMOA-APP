@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -11,9 +11,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapTokens } from '../../constants/map';
-import { DUMMY_RECENT_SEARCHES } from '../../data/mapDummy';
 import type { Place } from '../../types/map';
-import { ClockIcon, SearchIcon } from './MapIcons';
+import {
+  loadRecentMapSearches,
+  prependRecentSearch,
+  saveRecentMapSearches,
+} from '../../utils/recentMapSearches';
+import { ClockIcon, CloseIcon, SearchIcon } from './MapIcons';
 
 type Props = {
   visible: boolean;
@@ -58,9 +62,36 @@ export default function SearchModal({
 }: Props): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
+  /** 검색 버튼/최근 검색으로 확정된 키워드 — 이 값으로만 결과 필터 */
+  const [submittedQuery, setSubmittedQuery] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!visible) return;
+    void loadRecentMapSearches().then(setRecentSearches);
+  }, [visible]);
+
+  const persistRecent = useCallback((next: string[]) => {
+    setRecentSearches(next);
+    void saveRecentMapSearches(next);
+  }, []);
+
+  const pushRecent = useCallback(
+    (term: string) => {
+      persistRecent(prependRecentSearch(recentSearches, term));
+    },
+    [persistRecent, recentSearches],
+  );
+
+  const removeRecent = useCallback(
+    (term: string) => {
+      persistRecent(recentSearches.filter((item) => item !== term));
+    },
+    [persistRecent, recentSearches],
+  );
 
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = submittedQuery.trim().toLowerCase();
     if (!q) {
       return [];
     }
@@ -69,11 +100,41 @@ export default function SearchModal({
         p.name.toLowerCase().includes(q) ||
         (p.address?.toLowerCase().includes(q) ?? false),
     );
-  }, [places, query]);
+  }, [places, submittedQuery]);
+
+  const showResults = submittedQuery.trim().length > 0;
+
+  const resetSearch = (): void => {
+    setQuery('');
+    setSubmittedQuery('');
+  };
 
   const handleClose = (): void => {
-    setQuery('');
+    resetSearch();
     onClose();
+  };
+
+  const handleSearch = (): void => {
+    const term = query.trim();
+    if (!term) {
+      setSubmittedQuery('');
+      return;
+    }
+    setSubmittedQuery(term);
+    pushRecent(term);
+  };
+
+  const handleSelectPlace = (place: Place): void => {
+    pushRecent(place.name);
+    onSelectPlace(place);
+    resetSearch();
+    onClose();
+  };
+
+  const handleSelectRecent = (term: string): void => {
+    setQuery(term);
+    setSubmittedQuery(term);
+    pushRecent(term);
   };
 
   return (
@@ -90,22 +151,54 @@ export default function SearchModal({
               placeholderTextColor={MapTokens.textMuted}
               autoFocus
               returnKeyType="search"
+              onSubmitEditing={handleSearch}
+              blurOnSubmit={false}
             />
+            {query.length > 0 ? (
+              <Pressable
+                onPress={resetSearch}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="검색어 지우기"
+              >
+                <CloseIcon color={MapTokens.textMuted} size={16} />
+              </Pressable>
+            ) : null}
           </View>
           <Pressable onPress={handleClose} hitSlop={8}>
             <Text style={styles.cancel}>취소</Text>
           </Pressable>
         </View>
 
-        {query.trim().length === 0 ? (
+        {!showResults ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>최근 검색</Text>
-            {DUMMY_RECENT_SEARCHES.map((term) => (
-              <Pressable key={term} style={styles.recentRow} onPress={() => setQuery(term)}>
-                <ClockIcon color={MapTokens.textMuted} size={16} />
-                <Text style={styles.recentText}>{term}</Text>
-              </Pressable>
-            ))}
+            {recentSearches.length === 0 ? (
+              <Text style={styles.empty}>최근 검색 기록이 없어요.</Text>
+            ) : (
+              recentSearches.map((term) => (
+                <View key={term} style={styles.recentRow}>
+                  <Pressable
+                    style={styles.recentMain}
+                    onPress={() => handleSelectRecent(term)}
+                  >
+                    <ClockIcon color={MapTokens.textMuted} size={16} />
+                    <Text style={styles.recentText} numberOfLines={1}>
+                      {term}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.recentRemove}
+                    onPress={() => removeRecent(term)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${term} 삭제`}
+                  >
+                    <CloseIcon color={MapTokens.textMuted} size={16} />
+                  </Pressable>
+                </View>
+              ))
+            )}
           </View>
         ) : (
           <View style={styles.section}>
@@ -120,23 +213,23 @@ export default function SearchModal({
               renderItem={({ item }) => (
                 <Pressable
                   style={styles.resultRow}
-                  onPress={() => {
-                    onSelectPlace(item);
-                    setQuery('');
-                    onClose();
-                  }}
+                  onPress={() => handleSelectPlace(item)}
                 >
                   <View
                     style={[
                       styles.catDot,
                       {
                         backgroundColor:
-                          item.category === 'spot' ? MapTokens.green : MapTokens.blue,
+                          item.category === 'spot'
+                            ? MapTokens.green
+                            : item.category === 'food'
+                              ? MapTokens.coral
+                              : MapTokens.blue,
                       },
                     ]}
                   />
                   <View style={styles.resultTexts}>
-                    <HighlightName name={item.name} query={query} />
+                    <HighlightName name={item.name} query={submittedQuery} />
                     {item.address ? (
                       <Text style={styles.resultAddr}>{item.address}</Text>
                     ) : null}
@@ -198,14 +291,26 @@ const styles = StyleSheet.create({
   recentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: MapTokens.border,
   },
+  recentMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    minWidth: 0,
+  },
   recentText: {
+    flex: 1,
     fontSize: 15,
     color: MapTokens.text,
+  },
+  recentRemove: {
+    paddingVertical: 12,
+    paddingLeft: 12,
+    paddingRight: 4,
   },
   resultRow: {
     flexDirection: 'row',
