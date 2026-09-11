@@ -220,7 +220,7 @@ export default function SearchModal({
                       styles.catDot,
                       {
                         backgroundColor:
-                          item.category === 'spot'
+                          item.category === 'nature'
                             ? MapTokens.green
                             : item.category === 'food'
                               ? MapTokens.coral

@@ -5,13 +5,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SharedValue } from 'react-native-reanimated';
 
 import { MapTokens } from '../../constants/map';
+import { TabBarTokens } from '../../constants/tabs';
 
-export const ITINERARY_SHEET_HANDLE_HEIGHT = 56;
+/** 핸들 실제 높이: paddingTop(8) + indicator(4) + paddingBottom(4) */
+export const ITINERARY_SHEET_HANDLE_HEIGHT = 16;
+
+/** 접힘(펼치기 칩) → 기본 → 중간 → 최대 */
+const SNAP_POINTS = [64, '28%', '58%', '88%'] as const;
+/** 지도 진입 시 열리는 높이 (88% — 최대) */
+export const DEFAULT_OPEN_SNAP_INDEX = 3;
+/** 접힌 상태 인덱스 */
+const COLLAPSED_SNAP_INDEX = 0;
 
 type Props = {
   visible: boolean;
-  title: string;
-  expandToMid: boolean;
+  expandToMid?: boolean;
   animatedPosition: SharedValue<number>;
   onCollapsedChange: (collapsed: boolean) => void;
 };
@@ -21,12 +29,14 @@ export type ItinerarySheetRef = {
 };
 
 const ItineraryNativeSheet = forwardRef<ItinerarySheetRef, Props>(function ItineraryNativeSheet(
-  { visible, title, expandToMid, animatedPosition, onCollapsedChange },
+  { visible, animatedPosition, onCollapsedChange },
   ref,
 ) {
   const sheetRef = useRef<BottomSheet>(null);
   const insets = useSafeAreaInsets();
-  const snapPoints = useMemo(() => [64, '28%', '58%', '88%'], []);
+  const snapPoints = useMemo(() => [...SNAP_POINTS], []);
+  const onCollapsedChangeRef = useRef(onCollapsedChange);
+  onCollapsedChangeRef.current = onCollapsedChange;
 
   useImperativeHandle(ref, () => ({
     snapToIndex: (index: number) => {
@@ -38,25 +48,30 @@ const ItineraryNativeSheet = forwardRef<ItinerarySheetRef, Props>(function Itine
     (_props: BottomSheetHandleProps) => (
       <View style={styles.handleWrap}>
         <View style={styles.indicator} />
-        <Text style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
       </View>
     ),
-    [title],
+    [],
   );
 
+  // 일정 지도 진입 시 시트를 최대(88%)로 연다
   useEffect(() => {
-    if (!visible || !expandToMid) return;
-    sheetRef.current?.snapToIndex(2);
-  }, [visible, expandToMid]);
+    if (!visible) {
+      onCollapsedChangeRef.current(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      sheetRef.current?.snapToIndex(DEFAULT_OPEN_SNAP_INDEX);
+      onCollapsedChangeRef.current(false);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [visible]);
 
   if (!visible) return null;
 
   return (
     <BottomSheet
       ref={sheetRef}
-      index={1}
+      index={DEFAULT_OPEN_SNAP_INDEX}
       snapPoints={snapPoints}
       topInset={insets.top + 108}
       enablePanDownToClose={false}
@@ -65,7 +80,9 @@ const ItineraryNativeSheet = forwardRef<ItinerarySheetRef, Props>(function Itine
       enableHandlePanningGesture
       animatedPosition={animatedPosition}
       handleComponent={renderHandle}
-      onChange={(index) => onCollapsedChange(index === 0)}
+      onChange={(index) => {
+        onCollapsedChange(index === COLLAPSED_SNAP_INDEX);
+      }}
       backgroundStyle={styles.sheetBg}
       style={styles.sheet}
       containerStyle={styles.container}
@@ -81,23 +98,21 @@ export default ItineraryNativeSheet;
 
 export function ItinerarySheetExpandChip({
   visible,
-  label,
   onPress,
 }: {
   visible: boolean;
-  label: string;
   onPress: () => void;
 }): React.JSX.Element | null {
   const insets = useSafeAreaInsets();
   if (!visible) return null;
 
+  // 탭바 위에 떠야 보임 — safe area만 쓰면 탭바에 가려짐
+  const bottom = TabBarTokens.height + Math.max(insets.bottom, 0) + 12;
+
   return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.expandWrap, { bottom: Math.max(insets.bottom, 16) + 8 }]}
-    >
-      <Pressable style={styles.expand} onPress={onPress}>
-        <Text style={styles.expandLabel}>▲  {label}</Text>
+    <View pointerEvents="box-none" style={[styles.expandWrap, { bottom }]}>
+      <Pressable style={styles.expand} onPress={onPress} accessibilityLabel="일정 펼치기">
+        <Text style={styles.expandLabel}>▲  펼치기</Text>
       </Pressable>
     </View>
   );
@@ -123,22 +138,15 @@ const styles = StyleSheet.create({
   },
   handleWrap: {
     paddingTop: 8,
-    paddingBottom: 8,
+    paddingBottom: 4,
     paddingHorizontal: 16,
     alignItems: 'center',
-    gap: 8,
   },
   indicator: {
     width: 40,
     height: 4,
     borderRadius: 2,
     backgroundColor: '#D1D5DB',
-  },
-  title: {
-    alignSelf: 'flex-start',
-    fontSize: 16,
-    fontWeight: '700',
-    color: MapTokens.text,
   },
   body: {
     flex: 1,
@@ -147,25 +155,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    zIndex: 20,
-    elevation: 20,
+    zIndex: 50,
+    elevation: 50,
     alignItems: 'center',
   },
   expand: {
-    height: 40,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    height: 44,
+    paddingHorizontal: 20,
+    borderRadius: 22,
     backgroundColor: MapTokens.surface,
+    borderWidth: 1,
+    borderColor: MapTokens.border,
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
   expandLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: MapTokens.text,
+    color: MapTokens.green,
   },
 });

@@ -1,10 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import {
   NaverMapCircleOverlay,
   NaverMapMarkerOverlay,
-  NaverMapPolylineOverlay,
   NaverMapView,
   type NaverMapViewRef,
 } from '@mj-studio/react-native-naver-map';
@@ -13,6 +12,12 @@ import type { MapBounds } from '../../api/map';
 import type { PlanMapState } from '../../bridge/webviewBridge';
 import { JEJU_CENTER, MapTokens } from '../../constants/map';
 import { boundsFromRegion } from '../../utils/mapBounds';
+import CategoryMapPin, { CATEGORY_PIN_SIZE } from './CategoryMapPin';
+import PlanDayMapPin, {
+  PLAN_DAY_PIN_SIZE,
+  PLAN_DAY_PIN_SELECTED_SIZE,
+} from './PlanDayMapPin';
+import { categoryFromApiName } from '../../utils/mapMappers';
 
 type Props = {
   map: PlanMapState;
@@ -22,6 +27,29 @@ type Props = {
   onTapMap?: () => void;
   onRegionChanged?: (bounds: MapBounds) => void;
 };
+
+/** 일정 편집용 — 흰 바탕 · 검정 보더 · 검정 숫자/아이콘 */
+const ITINERARY_PIN_BG = '#FFFFFF';
+const ITINERARY_PIN_FG = '#25252D';
+
+/** 출발지용 작은 원형 핀 */
+function DepartureMapPin({ size = 24 }: { size?: number }): React.JSX.Element {
+  return (
+    <View
+      collapsable={false}
+      style={[
+        styles.departurePin,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+        },
+      ]}
+    >
+      <View style={styles.departureDot} />
+    </View>
+  );
+}
 
 export default function PlanItineraryMap({
   map,
@@ -49,19 +77,6 @@ export default function PlanItineraryMap({
       duration: 200,
     });
   }, []);
-
-  const routeCoords = useMemo(() => {
-    const points = [
-      ...(map.departure
-        ? [{ latitude: map.departure.latitude, longitude: map.departure.longitude }]
-        : []),
-      ...map.stops.map((stop) => ({
-        latitude: stop.latitude,
-        longitude: stop.longitude,
-      })),
-    ];
-    return points;
-  }, [map.departure, map.stops]);
 
   const showExploreOverlays = map.places.length > 0 || map.heatmap.length > 0;
 
@@ -144,16 +159,6 @@ export default function PlanItineraryMap({
           onRegionChanged?.(boundsFromRegion(params.region));
         }}
       >
-        {routeCoords.length >= 2 ? (
-          <NaverMapPolylineOverlay
-            coords={routeCoords}
-            width={4}
-            color={MapTokens.green}
-            capType="Round"
-            joinType="Round"
-          />
-        ) : null}
-
         {showExploreOverlays
           ? map.heatmap.map((point, index) => (
               <NaverMapCircleOverlay
@@ -172,14 +177,16 @@ export default function PlanItineraryMap({
           : null}
 
         {showExploreOverlays
-          ? map.places.map((place) => (
+          ? map.places.map((place) => {
+              const category = categoryFromApiName(place.categoryName);
+              return (
               <NaverMapMarkerOverlay
                 key={`p-${place.id}`}
                 latitude={place.latitude}
                 longitude={place.longitude}
-                image={{ symbol: 'green' }}
-                width={28}
-                height={36}
+                width={CATEGORY_PIN_SIZE}
+                height={CATEGORY_PIN_SIZE}
+                anchor={{ x: 0.5, y: 0.5 }}
                 caption={{
                   text: place.title,
                   textSize: 11,
@@ -187,18 +194,28 @@ export default function PlanItineraryMap({
                   haloColor: '#FFFFFF',
                 }}
                 onTap={() => onAssignPlace?.(place.id)}
-              />
-            ))
+              >
+                <CategoryMapPin
+                  key={`${place.id}/${category}`}
+                  category={category}
+                  size={CATEGORY_PIN_SIZE}
+                />
+              </NaverMapMarkerOverlay>
+              );
+            })
           : null}
 
-        {map.unassigned.map((place) => (
+        {map.unassigned.map((place) => {
+          const category = categoryFromApiName(place.categoryName);
+          return (
           <NaverMapMarkerOverlay
             key={`u-${place.id}`}
             latitude={place.latitude}
             longitude={place.longitude}
-            image={{ symbol: 'gray' }}
-            width={24}
-            height={32}
+            width={CATEGORY_PIN_SIZE}
+            height={CATEGORY_PIN_SIZE}
+            anchor={{ x: 0.5, y: 0.5 }}
+            zIndex={1}
             caption={{
               text: place.title,
               textSize: 11,
@@ -206,42 +223,66 @@ export default function PlanItineraryMap({
               haloColor: '#FFFFFF',
             }}
             onTap={() => onAssignPlace?.(place.id)}
-          />
-        ))}
+          >
+            <CategoryMapPin
+              key={`${place.id}/${category}`}
+              category={category}
+              size={CATEGORY_PIN_SIZE}
+            />
+          </NaverMapMarkerOverlay>
+          );
+        })}
 
         {map.departure ? (
           <NaverMapMarkerOverlay
             key={`d-${map.departure.id}`}
             latitude={map.departure.latitude}
             longitude={map.departure.longitude}
-            image={{ symbol: 'blue' }}
-            width={28}
-            height={36}
+            width={PLAN_DAY_PIN_SIZE}
+            height={PLAN_DAY_PIN_SIZE}
+            anchor={{ x: 0.5, y: 0.5 }}
+            zIndex={5}
             caption={{
               text: `출발 ${map.departure.title}`,
-              textSize: 12,
+              textSize: 11,
               color: MapTokens.text,
               haloColor: '#FFFFFF',
             }}
-          />
+          >
+            <DepartureMapPin size={PLAN_DAY_PIN_SIZE} />
+          </NaverMapMarkerOverlay>
         ) : null}
 
-        {map.stops.map((stop) => (
-          <NaverMapMarkerOverlay
-            key={`s-${stop.id}`}
-            latitude={stop.latitude}
-            longitude={stop.longitude}
-            image={{ symbol: stop.mustVisit ? 'yellow' : 'green' }}
-            width={28}
-            height={36}
-            caption={{
-              text: `${stop.order}. ${stop.title}`,
-              textSize: 12,
-              color: MapTokens.text,
-              haloColor: '#FFFFFF',
-            }}
-          />
-        ))}
+        {map.stops.map((stop) => {
+          const pinSize = stop.mustVisit ? PLAN_DAY_PIN_SELECTED_SIZE : PLAN_DAY_PIN_SIZE;
+          return (
+            <NaverMapMarkerOverlay
+              key={`s-${stop.id}-o${stop.order}-${stop.mustVisit ? 1 : 0}`}
+              latitude={stop.latitude}
+              longitude={stop.longitude}
+              width={pinSize}
+              height={pinSize}
+              anchor={{ x: 0.5, y: 0.5 }}
+              zIndex={stop.mustVisit ? 8 : 3}
+              caption={{
+                text: stop.title,
+                textSize: 11,
+                color: MapTokens.text,
+                haloColor: '#FFFFFF',
+              }}
+            >
+              <PlanDayMapPin
+                key={`pin-${stop.id}-${stop.order}-${stop.mustVisit ? 1 : 0}`}
+                order={stop.order}
+                color={ITINERARY_PIN_BG}
+                textColor={ITINERARY_PIN_FG}
+                borderColor={ITINERARY_PIN_FG}
+                size={PLAN_DAY_PIN_SIZE}
+                selected={Boolean(stop.mustVisit)}
+              />
+            </NaverMapMarkerOverlay>
+          );
+        })}
       </NaverMapView>
       {map.webOnTop ? null : (
         <View style={[styles.zoomControls, { top: controlsTop }]} pointerEvents="box-none">
@@ -294,6 +335,24 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  departurePin: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ITINERARY_PIN_BG,
+    borderWidth: 1.5,
+    borderColor: ITINERARY_PIN_FG,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 2.5,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 3,
+  },
+  departureDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: ITINERARY_PIN_FG,
   },
   zoomControls: {
     position: 'absolute',

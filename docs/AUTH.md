@@ -167,7 +167,23 @@ Secret은 FE/APP에 넣지 않는다.
 | 앱 `login` 라우트 | FE `/login` WebView |
 | FE `/login` | 카카오/네이버/구글 + (네이티브일 때) Apple 버튼 |
 | 앱 브릿지 | `REQUEST_APPLE_LOGIN` ↔ `APPLE_CREDENTIAL` / cancel / error + `LOGIN_SUCCESS` |
+| 앱 브릿지 (계획 목록) | Native `REQUEST_PLAN_SUMMARIES` → FE `GET /api/plans` → `SET_PLAN_SUMMARIES` |
 | BE apple | [appleLogin](https://gilmoa-dev.gyeonseo.com/swagger-ui/index.html#/%EC%9D%B8%EC%A6%9D/appleLogin) 연결됨 |
+
+### 계획 목록 브릿지 (지도 탭)
+
+지도 탭은 WebView가 없어 네이티브 `fetch`에 로그인 쿠키가 없다.  
+계획 목록은 **웹이 쿠키로 조회한 뒤** 네이티브로 넘긴다.
+
+```
+지도 계획 모드 → Native: REQUEST_PLAN_SUMMARIES (탭 WebView에 브로드캐스트)
+  → FE: GET /api/plans (withCredentials)
+  → FE: postMessage SET_PLAN_SUMMARIES { plans: TravelPlanSummary[] }
+  → Native MapScreen 목록 갱신
+```
+
+로그인 직후·계획 탭 진입 시 FE가 선제적으로 `SET_PLAN_SUMMARIES`를 보내도 된다.  
+`error` 문자열을 넣으면 네이티브는 목록을 비우고 로딩을 끝낸다.
 
 ---
 

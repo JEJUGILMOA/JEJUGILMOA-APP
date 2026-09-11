@@ -1,9 +1,9 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { CATEGORY_LABELS, MapTokens } from '../../constants/map';
+import { CATEGORY_LABELS, MapTokens, planDayColor } from '../../constants/map';
 import type { PlanTravelLeg, PlanWaypoint } from '../../types/map';
-import { CarIcon, ChevronLeftIcon } from './MapIcons';
+import { CarIcon, ChevronLeftIcon, LocateIcon } from './MapIcons';
 
 /** 계획 지도에서 하단 패널이 차지하는 화면 높이 비율 */
 export const PLAN_PANEL_HEIGHT_RATIO = 0.4;
@@ -14,9 +14,12 @@ type Props = {
   waypoints: PlanWaypoint[];
   legs: PlanTravelLeg[];
   selectedId: string | null;
+  /** null이면 전체 일차 표시 */
+  selectedDayNumber?: number | null;
   loading?: boolean;
   onPressBack?: () => void;
   onPressWaypoint: (waypoint: PlanWaypoint) => void;
+  onPressDay?: (dayNumber: number) => void;
   onPressDetailSchedule: () => void;
 };
 
@@ -24,8 +27,15 @@ function legBetween(
   legs: PlanTravelLeg[] | undefined,
   fromId: string,
   toId: string,
+  dayNumber?: number,
 ): PlanTravelLeg | undefined {
-  return (legs ?? []).find((leg) => leg.fromId === fromId && leg.toId === toId);
+  return (legs ?? []).find((leg) => {
+    if (leg.fromId !== fromId || leg.toId !== toId) return false;
+    if (dayNumber != null && leg.dayNumber != null) {
+      return leg.dayNumber === dayNumber;
+    }
+    return true;
+  });
 }
 
 export default function PlanSummaryPanel({
@@ -34,9 +44,11 @@ export default function PlanSummaryPanel({
   waypoints,
   legs = [],
   selectedId,
+  selectedDayNumber = null,
   loading = false,
   onPressBack,
   onPressWaypoint,
+  onPressDay,
   onPressDetailSchedule,
 }: Props): React.JSX.Element {
   return (
@@ -75,56 +87,87 @@ export default function PlanSummaryPanel({
       ) : null}
 
       {!loading ? (
-      <ScrollView
-        style={styles.list}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator
-        keyboardShouldPersistTaps="handled"
-      >
-        {waypoints.map((wp, index) => {
-          const next = waypoints[index + 1];
-          const leg = next ? legBetween(legs, wp.id, next.id) : undefined;
-          const selected = selectedId === wp.id;
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator
+          keyboardShouldPersistTaps="handled"
+        >
+          {waypoints.map((wp, index) => {
+            const next = waypoints[index + 1];
+            const dayNumber = wp.dayNumber ?? 1;
+            const nextSameDay = next != null && (next.dayNumber ?? 1) === dayNumber;
+            const leg =
+              next && nextSameDay
+                ? legBetween(legs, wp.id, next.id, dayNumber)
+                : undefined;
+            const selected = selectedId === wp.id;
+            const showDayHeader =
+              index === 0 || (waypoints[index - 1]?.dayNumber ?? 1) !== dayNumber;
+            const badgeColor = planDayColor(dayNumber);
+            const daySelected = selectedDayNumber === dayNumber;
 
-          return (
-            <View key={wp.id}>
-              <Pressable
-                style={[styles.row, selected && styles.rowSelected]}
-                onPress={() => onPressWaypoint(wp)}
-              >
-                <View style={styles.orderBadge}>
-                  <Text style={styles.orderText}>{wp.order}</Text>
-                </View>
-                <View style={styles.rowBody}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.placeName} numberOfLines={1}>
-                      {wp.name}
+            return (
+              <View key={`${dayNumber}-${wp.order}-${wp.id}`}>
+                {showDayHeader ? (
+                  <Pressable
+                    onPress={() => onPressDay?.(dayNumber)}
+                    style={[
+                      styles.dayHeaderButton,
+                      {
+                        borderColor: daySelected ? badgeColor : MapTokens.border,
+                        backgroundColor: daySelected
+                          ? `${badgeColor}1F`
+                          : MapTokens.surface,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: daySelected }}
+                    accessibilityLabel={`${dayNumber}일차만 지도에 보기`}
+                  >
+                    <LocateIcon color={badgeColor} size={16} />
+                    <Text style={[styles.dayHeader, { color: badgeColor }]}>
+                      {dayNumber}일차
                     </Text>
-                    <View style={styles.categoryBadge}>
-                      <Text style={styles.categoryText}>
-                        {CATEGORY_LABELS[wp.category]}
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  style={[styles.row, selected && styles.rowSelected]}
+                  onPress={() => onPressWaypoint(wp)}
+                >
+                  <View style={[styles.orderBadge, { backgroundColor: badgeColor }]}>
+                    <Text style={styles.orderText}>{wp.order}</Text>
+                  </View>
+                  <View style={styles.rowBody}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.placeName} numberOfLines={1}>
+                        {wp.name}
+                      </Text>
+                      <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryText}>
+                          {CATEGORY_LABELS[wp.category]}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  {wp.visitTime ? <Text style={styles.time}>{wp.visitTime}</Text> : null}
+                </Pressable>
+
+                {leg ? (
+                  <View style={styles.legRow}>
+                    <View style={[styles.legLine, { backgroundColor: badgeColor }]} />
+                    <View style={styles.legChip}>
+                      <CarIcon color={MapTokens.textMuted} size={12} />
+                      <Text style={styles.legText}>
+                        {leg.durationMinutes}분 ({leg.distanceKm}km)
                       </Text>
                     </View>
                   </View>
-                </View>
-                {wp.visitTime ? <Text style={styles.time}>{wp.visitTime}</Text> : null}
-              </Pressable>
-
-              {leg ? (
-                <View style={styles.legRow}>
-                  <View style={styles.legLine} />
-                  <View style={styles.legChip}>
-                    <CarIcon color={MapTokens.textMuted} size={12} />
-                    <Text style={styles.legText}>
-                      {leg.durationMinutes}분 ({leg.distanceKm}km)
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
-            </View>
-          );
-        })}
-      </ScrollView>
+                ) : null}
+              </View>
+            );
+          })}
+        </ScrollView>
       ) : null}
     </View>
   );
@@ -138,7 +181,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: MapTokens.border,
-    // 탭바가 이미 safe-area(insets.bottom)를 포함하므로 여기선 최소 여백만
     paddingBottom: 8,
   },
   header: {
@@ -193,6 +235,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 8,
+  },
+  dayHeaderButton: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    marginBottom: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dayHeader: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   row: {
     flexDirection: 'row',

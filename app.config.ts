@@ -16,6 +16,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       ...config.ios?.infoPlist,
       ITSAppUsesNonExemptEncryption: false,
+      NSLocationWhenInUseUsageDescription:
+        '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
+      NSLocationAlwaysAndWhenInUseUsageDescription:
+        '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
     },
   },
   android: {
@@ -26,6 +30,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: './assets/images/appicon.png',
     },
     predictiveBackGestureEnabled: false,
+    permissions: [
+      'ACCESS_COARSE_LOCATION',
+      'ACCESS_FINE_LOCATION',
+    ],
   },
   web: {
     output: 'static',
@@ -40,6 +48,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-router',
     'expo-apple-authentication',
+    [
+      'expo-location',
+      {
+        locationWhenInUsePermission:
+          '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
+      },
+    ],
     [
       'expo-splash-screen',
       {
@@ -61,9 +76,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         },
         ios: {
           NSLocationWhenInUseUsageDescription:
-            '주변 장소와 경로 안내를 위해 현재 위치를 사용합니다.',
+            '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
           NSLocationAlwaysAndWhenInUseUsageDescription:
-            '주변 장소와 경로 안내를 위해 현재 위치를 사용합니다.',
+            '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
         },
       },
     ],

@@ -58,6 +58,8 @@
 - [x] Apple: Native nonce(SHA256→Apple, rawNonce→BE) + WebView 브릿지 (`REQUEST_APPLE_LOGIN` / `APPLE_CREDENTIAL` / `LOGIN_SUCCESS`)
 - [x] 소셜 OAuth를 네이티브 스택 `/oauth` 새 화면으로 분리 (`OPEN_OAUTH_LOGIN`) + 임시 로그인
 - [x] Apple 실로그인: `POST /api/auth/apple/login` (identityToken + rawNonce) 연결
+- [x] 지도 계획 목록: 웹 쿠키 조회 → `SET_PLAN_SUMMARIES` 브릿지 (네이티브 직접 `/api/plans` 제거)
+- [ ] FE: `REQUEST_PLAN_SUMMARIES` 수신 후 `GET /api/plans` → `SET_PLAN_SUMMARIES` 송신
 - [ ] 소셜 OAuth SDK + `oauth/{provider}/login` 실호출 E2E (iOS Apple 실기기 포함)
 - [ ] API 클라이언트 작성
 - [ ] 로딩/에러/빈 상태 UI

@@ -13,7 +13,7 @@ type Props = {
   onGoGeneralMap: () => void;
 };
 
-/** MAP-03a: 진행중 여행 없음 (비로그인 등) */
+/** MAP-03a: 진행중 여행 없음 (미시작) */
 export default function ActiveTripEmptySheet({
   visible,
   underOverlay = false,
@@ -33,7 +33,7 @@ export default function ActiveTripEmptySheet({
   }, [visible]);
 
   const handleStartTrip = useCallback(() => {
-    router.push('/login');
+    router.push('/(tabs)/plan');
   }, [router]);
 
   if (!visible) {
@@ -57,7 +57,7 @@ export default function ActiveTripEmptySheet({
         </View>
         <Text style={styles.title}>진행중인 여행이 없어요</Text>
         <Text style={styles.desc}>
-          여행을 시작하면 이동 경로와 목적지를{'\n'}지도에서 바로 확인할 수 있어요
+          계획을 시작한 뒤 이동 경로와 목적지를{'\n'}지도에서 바로 확인할 수 있어요
         </Text>
         <View style={styles.actions}>
           <Pressable
@@ -72,7 +72,7 @@ export default function ActiveTripEmptySheet({
             onPress={handleStartTrip}
             accessibilityRole="button"
           >
-            <Text style={styles.primaryText}>여행 시작하기</Text>
+            <Text style={styles.primaryText}>내 계획 보기</Text>
           </Pressable>
         </View>
       </BottomSheetView>

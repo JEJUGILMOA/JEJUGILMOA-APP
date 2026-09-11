@@ -5,18 +5,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { router, useFocusEffect } from 'expo-router';
 
+import { clearStoredWebAuth, getStoredWebAuth, setStoredWebAuth } from '../auth/webAuthSession';
 import { setPendingOAuthLaunch } from '../auth/oauthLaunch';
 import {
   handleBridgeMessage,
   HIDDEN_ITINERARY_CHROME,
+  injectStoredWebAuthToWeb,
   mergePlanMap,
   sendToWeb,
   type HeaderState,
   type PlanItineraryChromeState,
   type PlanMapState,
 } from '../bridge/webviewBridge';
+import { clearPlanList, setPlanListFromWeb } from '../bridge/planListStore';
+import { registerBridgeWebView } from '../bridge/webviewRegistry';
 import ItineraryChrome from '../components/map/ItineraryChrome';
 import ItineraryNativeSheet, {
+  DEFAULT_OPEN_SNAP_INDEX,
   ITINERARY_SHEET_HANDLE_HEIGHT,
   ItinerarySheetExpandChip,
   type ItinerarySheetRef,
@@ -53,8 +58,8 @@ const HIDE_WEB_CHROME = `
     '[data-gilmoa-itinerary-zoom]{display:none!important;}',
     '[data-gilmoa-itinerary-float]{display:none!important;}',
     '[data-gilmoa-itinerary-sheet-chrome]{display:none!important;}',
-    'html.gilmoa-native-map,html.gilmoa-native-map body,html.gilmoa-native-map #root,html.gilmoa-native-map [data-gilmoa-shell],html.gilmoa-native-map main{background:transparent!important;height:100%!important;max-height:100%!important;overflow:hidden!important;}',
-    'html.gilmoa-native-map [data-gilmoa-itinerary-sheet-body]{height:100%!important;max-height:100%!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;}',
+    'html.gilmoa-native-map,html.gilmoa-native-map body,html.gilmoa-native-map #root,html.gilmoa-native-map [data-gilmoa-shell],html.gilmoa-native-map main{background:transparent!important;height:100%!important;max-height:100%!important;overflow:hidden!important;padding-bottom:0!important;}',
+    'html.gilmoa-native-map [data-gilmoa-itinerary-sheet-body]{flex:1!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;}',
     'html,body,#root,[data-gilmoa-shell],main{height:100%!important;min-height:100%!important;}'
   ].join('');
   document.documentElement.appendChild(style);
@@ -104,6 +109,24 @@ export default function WebViewScreen({ path, tabName }: Props) {
   useEffect(() => {
     setActivePath(path);
   }, [path]);
+
+  const unregisterWebViewRef = useRef<(() => void) | null>(null);
+  const bindWebViewRef = useCallback((instance: WebView | null) => {
+    unregisterWebViewRef.current?.();
+    unregisterWebViewRef.current = null;
+    webviewRef.current = instance;
+    if (instance) {
+      unregisterWebViewRef.current = registerBridgeWebView(instance);
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      unregisterWebViewRef.current?.();
+      unregisterWebViewRef.current = null;
+    },
+    [],
+  );
 
   // 화면 전환 후 마운트/포커스 시 대기 중인 네이티브 토스트·딥링크
   useFocusEffect(
@@ -227,11 +250,32 @@ export default function WebViewScreen({ path, tabName }: Props) {
       },
       onLoginSuccess: (payload) => {
         void (async () => {
+          if (payload?.user) {
+            setStoredWebAuth({
+              accessToken: payload.accessToken,
+              user: payload.user,
+            });
+          } else if (payload?.accessToken) {
+            setStoredWebAuth({
+              accessToken: payload.accessToken,
+              user: { id: 'native-user', nickname: '길모아 사용자' },
+            });
+          } else {
+            clearStoredWebAuth();
+          }
           await signIn(payload?.provider ?? 'apple');
           router.replace('/(tabs)');
         })();
       },
+      onWebReady: () => {
+        injectStoredWebAuthToWeb(webviewRef.current, getStoredWebAuth());
+      },
+      onSetPlanSummaries: ({ plans, error }) => {
+        setPlanListFromWeb(plans, error);
+      },
       onLogout: () => {
+        clearStoredWebAuth();
+        clearPlanList();
         setPendingNativeToast({
           kind: 'success',
           message: '로그아웃되었어요.',
@@ -247,6 +291,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
       type: 'NATIVE_READY',
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
     });
+    injectStoredWebAuthToWeb(webviewRef.current, getStoredWebAuth());
   }, []);
 
   useTabRepress(
@@ -329,7 +374,17 @@ export default function WebViewScreen({ path, tabName }: Props) {
 
   useEffect(() => {
     isItinerarySV.value = itineraryMode ? 1 : 0;
-    if (!itineraryMode) sheetPosition.value = 0;
+    if (!itineraryMode) {
+      sheetPosition.value = 0;
+      setSheetCollapsed(false);
+      return;
+    }
+    // 지도 진입 시 시트를 최대(88%)로 연다
+    setSheetCollapsed(false);
+    const timer = setTimeout(() => {
+      itinerarySheetRef.current?.snapToIndex(DEFAULT_OPEN_SNAP_INDEX);
+    }, 80);
+    return () => clearTimeout(timer);
   }, [isItinerarySV, itineraryMode, sheetPosition]);
 
   const webviewWrapStyle = useAnimatedStyle(() => {
@@ -358,8 +413,6 @@ export default function WebViewScreen({ path, tabName }: Props) {
   });
 
   const topInset = itineraryMode ? 0 : header.visible ? 0 : insets.top;
-  const expandToMid =
-    itineraryChrome.isSelectingDeparture || Boolean(itineraryChrome.searchQuery.trim());
 
   return (
     <View
@@ -396,14 +449,12 @@ export default function WebViewScreen({ path, tabName }: Props) {
       <ItineraryNativeSheet
         ref={itinerarySheetRef}
         visible={itineraryMode}
-        title={itineraryChrome.sheetTitle}
-        expandToMid={expandToMid}
         animatedPosition={sheetPosition}
         onCollapsedChange={setSheetCollapsed}
       />
       <Animated.View style={[styles.webviewHost, webviewWrapStyle]}>
         <WebView
-          ref={webviewRef}
+          ref={bindWebViewRef}
           style={[styles.webviewFill, { backgroundColor: itineraryMode ? 'transparent' : '#fff' }]}
           containerStyle={itineraryMode ? styles.webviewContainerTransparent : undefined}
           nestedScrollEnabled
@@ -439,8 +490,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
       ) : null}
       <ItinerarySheetExpandChip
         visible={itineraryMode && sheetCollapsed}
-        label={itineraryChrome.sheetTitle}
-        onPress={() => itinerarySheetRef.current?.snapToIndex(1)}
+        onPress={() => itinerarySheetRef.current?.snapToIndex(DEFAULT_OPEN_SNAP_INDEX)}
       />
       <WebToast
         toast={webToast}

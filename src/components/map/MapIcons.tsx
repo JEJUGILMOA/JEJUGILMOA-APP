@@ -449,12 +449,22 @@ export function CategoryIcon({
   switch (category) {
     case 'all':
       return <GridIcon color={color} size={size} />;
+    case 'nature':
+      return <MountainIcon color={color} size={size} />;
     case 'food':
       return <UtensilsIcon color={color} size={size} />;
     case 'cafe':
       return <CoffeeIcon color={color} size={size} />;
-    case 'spot':
-      return <MountainIcon color={color} size={size} />;
+    case 'activity':
+      return <WalkIcon color={color} size={size} />;
+    case 'history':
+      return <FlagIcon color={color} size={size} />;
+    case 'shopping':
+      return <LayersIcon color={color} size={size} />;
+    case 'festival':
+      return <FlameIcon color={color} size={size} />;
+    case 'stay':
+      return <MapPinIcon color={color} size={size} />;
     case 'favorite':
       return <StarIcon color={color} size={size} />;
   }

@@ -62,6 +62,32 @@ export type TravelPlanDetailResponse = {
   totalBudget: number | null;
 };
 
+export type PlanRouteStatus =
+  | 'CALCULATING'
+  | 'READY'
+  | 'FAILED'
+  | 'UNSUPPORTED'
+  | 'NOT_REQUIRED';
+
+export type PlanRouteDto = {
+  date: string;
+  status: PlanRouteStatus;
+  option?: string | null;
+  distance?: number | null;
+  duration?: number | null;
+  calculatedAt?: string | null;
+  /** [longitude, latitude][] */
+  path?: [number, number][] | null;
+  failureCode?: string | null;
+};
+
+/** GET /api/plans/{planId}/routes */
+export type TravelPlanRoutesResponse = {
+  planId: number;
+  generation?: { status?: string } | null;
+  routes: PlanRouteDto[];
+};
+
 /** GET /api/plans — 내 여행 계획 목록 */
 export async function fetchPlanSummaries(
   init?: RequestInit,
@@ -75,4 +101,17 @@ export async function fetchPlanById(
   init?: RequestInit,
 ): Promise<TravelPlanDetailResponse> {
   return apiFetch<TravelPlanDetailResponse>(`/api/plans/${planId}`, init);
+}
+
+/** GET /api/plans/{planId}/routes — 날짜별 저장 경로 */
+export async function fetchPlanRoutes(
+  planId: number,
+  init?: RequestInit & { date?: string },
+): Promise<TravelPlanRoutesResponse> {
+  const { date, ...rest } = init ?? {};
+  const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  return apiFetch<TravelPlanRoutesResponse>(
+    `/api/plans/${planId}/routes${qs}`,
+    rest,
+  );
 }

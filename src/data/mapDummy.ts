@@ -7,7 +7,7 @@ export const DUMMY_PLACES: Place[] = [
     name: '협재해변',
     latitude: 33.3940,
     longitude: 126.2394,
-    category: 'spot',
+    category: 'nature',
     rating: 4.7,
     address: '제주시 한림읍 협재리',
     description: '에메랄드빛 바다와 비양도가 보이는 대표 해변.',
@@ -34,7 +34,7 @@ export const DUMMY_PLACES: Place[] = [
     name: '성산일출봉',
     latitude: 33.4581,
     longitude: 126.9425,
-    category: 'spot',
+    category: 'nature',
     rating: 4.6,
     address: '제주 서귀포시 성산읍 고성리',
     description:
@@ -86,19 +86,18 @@ export const DUMMY_PLACES: Place[] = [
 ];
 
 export const DUMMY_PLAN_WAYPOINTS: PlanWaypoint[] = [
-  { ...DUMMY_PLACES[0], order: 1, visitTime: '09:00' },
-  { ...DUMMY_PLACES[1], order: 2, visitTime: '11:00' },
-  { ...DUMMY_PLACES[4], order: 3, visitTime: '13:30' },
-  { ...DUMMY_PLACES[3], order: 4, visitTime: '15:30' },
-  { ...DUMMY_PLACES[2], order: 5, visitTime: '17:30' },
+  { ...DUMMY_PLACES[0], order: 1, dayNumber: 1, visitTime: '09:00' },
+  { ...DUMMY_PLACES[1], order: 2, dayNumber: 1, visitTime: '11:00' },
+  { ...DUMMY_PLACES[4], order: 3, dayNumber: 1, visitTime: '13:30' },
+  { ...DUMMY_PLACES[3], order: 1, dayNumber: 2, visitTime: '15:30' },
+  { ...DUMMY_PLACES[2], order: 2, dayNumber: 2, visitTime: '17:30' },
 ];
 
 /** 경유지 사이 이동 정보 (더미) */
 export const DUMMY_PLAN_LEGS: PlanTravelLeg[] = [
-  { fromId: 'p1', toId: 'p2', durationMinutes: 23, distanceKm: 18 },
-  { fromId: 'p2', toId: 'p5', durationMinutes: 45, distanceKm: 42 },
-  { fromId: 'p5', toId: 'p4', durationMinutes: 28, distanceKm: 22 },
-  { fromId: 'p4', toId: 'p3', durationMinutes: 55, distanceKm: 48 },
+  { fromId: 'p1', toId: 'p2', durationMinutes: 23, distanceKm: 18, dayNumber: 1 },
+  { fromId: 'p2', toId: 'p5', durationMinutes: 45, distanceKm: 42, dayNumber: 1 },
+  { fromId: 'p4', toId: 'p3', durationMinutes: 55, distanceKm: 48, dayNumber: 2 },
 ];
 
 export const DUMMY_PLAN_META = {

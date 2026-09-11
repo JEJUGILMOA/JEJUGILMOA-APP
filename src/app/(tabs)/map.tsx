@@ -1,5 +1,5 @@
-import MapScreen from '@/screens/MapScreen';
+import MapTabHost from '@/screens/MapTabHost';
 
 export default function MapTab() {
-  return <MapScreen />;
+  return <MapTabHost />;
 }

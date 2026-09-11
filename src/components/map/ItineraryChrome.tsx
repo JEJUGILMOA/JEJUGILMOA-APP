@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Path, Svg } from 'react-native-svg';
 
 import type { PlanItineraryChromeState } from '../../bridge/webviewBridge';
@@ -16,24 +16,14 @@ type Props = {
   onDepartureCancel: () => void;
 };
 
+/** 검색은 WebView 바텀시트(장소 추가 탭)로 옮겼다 — 상단에는 Day 페이저만 둔다. */
 export default function ItineraryChrome({
   chrome,
   insetTop,
   onBack,
   onNext,
   onDayChange,
-  onSearchChange,
-  onSearchClear,
-  onDepartureCancel,
 }: Props): React.JSX.Element | null {
-  const inputRef = useRef<TextInput>(null);
-  const focusedRef = useRef(false);
-  const [query, setQuery] = useState(chrome.searchQuery);
-
-  useEffect(() => {
-    if (!focusedRef.current) setQuery(chrome.searchQuery);
-  }, [chrome.searchQuery]);
-
   if (!chrome.visible) return null;
 
   return (
@@ -63,50 +53,13 @@ export default function ItineraryChrome({
             <ChevronIcon direction="right" size={18} muted={chrome.day >= chrome.totalDays} />
           </Pressable>
         </View>
-        <Pressable style={styles.next} onPress={onNext}>
-          <Text style={styles.nextLabel}>{chrome.nextLabel}</Text>
-        </Pressable>
-      </View>
-      <View style={[styles.search, chrome.isSelectingDeparture && styles.searchActive]}>
-        {chrome.isSelectingDeparture ? (
-          <Text style={styles.modeLabel}>🚩 출발지</Text>
+        {chrome.nextLabel ? (
+          <Pressable style={styles.next} onPress={onNext}>
+            <Text style={styles.nextLabel}>{chrome.nextLabel}</Text>
+          </Pressable>
         ) : (
-          <SearchIcon />
+          <View style={styles.circleSpacer} />
         )}
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          value={query}
-          onChangeText={(value) => {
-            setQuery(value);
-            onSearchChange(value);
-          }}
-          onFocus={() => {
-            focusedRef.current = true;
-          }}
-          onBlur={() => {
-            focusedRef.current = false;
-          }}
-          placeholder={chrome.searchPlaceholder}
-          placeholderTextColor="#9C9C97"
-          returnKeyType="search"
-        />
-        {chrome.isSelectingDeparture ? (
-          <Pressable onPress={onDepartureCancel} hitSlop={8}>
-            <Text style={styles.cancel}>취소</Text>
-          </Pressable>
-        ) : query ? (
-          <Pressable
-            onPress={() => {
-              setQuery('');
-              onSearchClear();
-            }}
-            accessibilityLabel="검색어 지우기"
-            hitSlop={8}
-          >
-            <Text style={styles.clear}>×</Text>
-          </Pressable>
-        ) : null}
       </View>
     </View>
   );
@@ -126,23 +79,10 @@ function ChevronIcon({
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d={d}
-        stroke={muted ? '#C8C8C4' : MapTokens.text}
+        stroke={muted ? '#C4C4C0' : MapTokens.text}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-function SearchIcon(): React.JSX.Element {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM21 21l-4.35-4.35"
-        stroke="#9C9C97"
-        strokeWidth={2}
-        strokeLinecap="round"
       />
     </Svg>
   );
@@ -156,7 +96,6 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 30,
     paddingHorizontal: 12,
-    gap: 10,
   },
   row: {
     flexDirection: 'row',
@@ -175,6 +114,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
+  },
+  circleSpacer: {
+    width: 40,
+    height: 40,
   },
   pager: {
     flex: 1,
@@ -218,44 +161,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#17783C',
-  },
-  search: {
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  searchActive: {
-    borderWidth: 1,
-    borderColor: '#17783C',
-  },
-  modeLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: MapTokens.text,
-  },
-  input: {
-    flex: 1,
-    fontSize: 14,
-    color: MapTokens.text,
-    padding: 0,
-  },
-  cancel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#17783C',
-  },
-  clear: {
-    fontSize: 22,
-    lineHeight: 22,
-    color: '#9C9C97',
   },
 });

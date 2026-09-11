@@ -1,20 +1,25 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { MapTokens, type PlaceCategory } from '../../constants/map';
+import { MapTokens, type PlaceApiCategory, type PlaceCategory } from '../../constants/map';
 import { CategoryIcon } from './MapIcons';
 
-type PinCategory = Exclude<PlaceCategory, 'all'>;
+type PinCategory = PlaceApiCategory | 'favorite';
 
 const PIN_COLORS: Record<PinCategory, string> = {
+  nature: MapTokens.green,
   food: MapTokens.coral,
   cafe: MapTokens.blue,
-  spot: MapTokens.green,
+  activity: '#C2410C',
+  history: '#854F0B',
+  shopping: '#993556',
+  festival: MapTokens.purple,
+  stay: '#3B4F7A',
   favorite: MapTokens.amber,
 };
 
 export type CategoryMapPinProps = {
-  category: PinCategory;
+  category: PlaceApiCategory;
   isFavorite?: boolean;
   /** 기본 28 */
   size?: number;
@@ -50,7 +55,7 @@ export default function CategoryMapPin({
         selected ? styles.pinSelected : null,
       ]}
     >
-      <CategoryIcon category={tone} color="#FFFFFF" size={iconSize} />
+      <CategoryIcon category={tone as PlaceCategory} color="#FFFFFF" size={iconSize} />
     </View>
   );
 }

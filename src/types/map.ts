@@ -1,11 +1,11 @@
-import type { PlaceCategory } from '../constants/map';
+import type { PlaceApiCategory } from '../constants/map';
 
 export type Place = {
   id: string;
   name: string;
   latitude: number;
   longitude: number;
-  category: Exclude<PlaceCategory, 'all'>;
+  category: PlaceApiCategory;
   rating?: number;
   address?: string;
   description?: string;
@@ -20,6 +20,8 @@ export type Place = {
 
 export type PlanWaypoint = Place & {
   order: number;
+  /** 1일차 = 1. 없으면 단일 일정으로 취급 */
+  dayNumber?: number;
   /** 계획 방문 시각 표시용 (더미/스케줄) */
   visitTime?: string;
 };
@@ -29,6 +31,7 @@ export type PlanTravelLeg = {
   toId: string;
   durationMinutes: number;
   distanceKm: number;
+  dayNumber?: number;
 };
 
 export type HeatZone = {
