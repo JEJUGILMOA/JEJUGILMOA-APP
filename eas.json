@@ -20,6 +20,13 @@
     }
   },
   "submit": {
-    "preview": {}
+    "preview": {
+      "ios": {
+        "ascAppId": "6803198336",
+        "ascApiKeyPath": "./AuthKey_KPLAPQ3B37.p8",
+        "ascApiKeyIssuerId": "60c0bde9-7c6c-4d69-b9ea-64aba0cd9306",
+        "ascApiKeyId": "KPLAPQ3B37"
+      }
+    }
   }
 }
