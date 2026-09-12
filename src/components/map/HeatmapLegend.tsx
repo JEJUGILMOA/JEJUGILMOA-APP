@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 
 import { MapTokens } from '../../constants/map';
 
@@ -12,11 +13,11 @@ export default function HeatmapLegend({ bottomOffset }: Props): React.JSX.Elemen
     <View style={[styles.wrap, { bottom: bottomOffset }]}>
       <View style={styles.row}>
         <View style={[styles.swatch, { backgroundColor: MapTokens.coral }]} />
-        <Text style={styles.label}>매우 혼잡</Text>
+        <MapText style={styles.label}>매우 혼잡</MapText>
       </View>
       <View style={styles.row}>
         <View style={[styles.swatch, { backgroundColor: MapTokens.yellow }]} />
-        <Text style={styles.label}>보통</Text>
+        <MapText style={styles.label}>보통</MapText>
       </View>
     </View>
   );

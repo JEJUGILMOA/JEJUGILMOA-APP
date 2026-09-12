@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 
 import { CATEGORY_LABELS, MapTokens, planDayColor } from '../../constants/map';
 import type { PlanTravelLeg, PlanWaypoint } from '../../types/map';
@@ -67,16 +68,16 @@ export default function PlanSummaryPanel({
                 <ChevronLeftIcon color={MapTokens.text} size={22} />
               </Pressable>
             ) : null}
-            <Text style={styles.title} numberOfLines={1}>
+            <MapText style={styles.title} numberOfLines={1}>
               {planTitle}
-            </Text>
+            </MapText>
           </View>
-          <Text style={styles.summary}>
+          <MapText style={styles.summary}>
             {waypoints.length}개 장소 · {durationLabel}
-          </Text>
+          </MapText>
         </View>
         <Pressable onPress={onPressDetailSchedule} hitSlop={6}>
-          <Text style={styles.detailLink}>상세 일정 보기 ›</Text>
+          <MapText style={styles.detailLink}>상세 일정 보기 ›</MapText>
         </Pressable>
       </View>
 
@@ -126,9 +127,9 @@ export default function PlanSummaryPanel({
                     accessibilityLabel={`${dayNumber}일차만 지도에 보기`}
                   >
                     <LocateIcon color={badgeColor} size={16} />
-                    <Text style={[styles.dayHeader, { color: badgeColor }]}>
+                    <MapText style={[styles.dayHeader, { color: badgeColor }]}>
                       {dayNumber}일차
-                    </Text>
+                    </MapText>
                   </Pressable>
                 ) : null}
                 <Pressable
@@ -136,21 +137,21 @@ export default function PlanSummaryPanel({
                   onPress={() => onPressWaypoint(wp)}
                 >
                   <View style={[styles.orderBadge, { backgroundColor: badgeColor }]}>
-                    <Text style={styles.orderText}>{wp.order}</Text>
+                    <MapText style={styles.orderText}>{wp.order}</MapText>
                   </View>
                   <View style={styles.rowBody}>
                     <View style={styles.nameRow}>
-                      <Text style={styles.placeName} numberOfLines={1}>
+                      <MapText style={styles.placeName} numberOfLines={1}>
                         {wp.name}
-                      </Text>
+                      </MapText>
                       <View style={styles.categoryBadge}>
-                        <Text style={styles.categoryText}>
+                        <MapText style={styles.categoryText}>
                           {CATEGORY_LABELS[wp.category]}
-                        </Text>
+                        </MapText>
                       </View>
                     </View>
                   </View>
-                  {wp.visitTime ? <Text style={styles.time}>{wp.visitTime}</Text> : null}
+                  {wp.visitTime ? <MapText style={styles.time}>{wp.visitTime}</MapText> : null}
                 </Pressable>
 
                 {leg ? (
@@ -158,9 +159,9 @@ export default function PlanSummaryPanel({
                     <View style={[styles.legLine, { backgroundColor: badgeColor }]} />
                     <View style={styles.legChip}>
                       <CarIcon color={MapTokens.textMuted} size={12} />
-                      <Text style={styles.legText}>
+                      <MapText style={styles.legText}>
                         {leg.durationMinutes}분 ({leg.distanceKm}km)
-                      </Text>
+                      </MapText>
                     </View>
                   </View>
                 ) : null}

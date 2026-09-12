@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -75,7 +76,7 @@ export default function ModeBottomSheet({
       containerStyle={styles.container}
     >
       <BottomSheetView style={styles.content}>
-        <Text style={styles.title}>지도 모드 선택</Text>
+        <MapText style={styles.title}>지도 모드 선택</MapText>
         {MAP_MODE_OPTIONS.map((option) => {
           const active = option.id === currentMode;
           return (
@@ -95,8 +96,8 @@ export default function ModeBottomSheet({
                 />
               </View>
               <View style={styles.texts}>
-                <Text style={styles.rowTitle}>{option.title}</Text>
-                <Text style={styles.rowDesc}>{option.description}</Text>
+                <MapText style={styles.rowTitle}>{option.title}</MapText>
+                <MapText style={styles.rowDesc}>{option.description}</MapText>
               </View>
             </Pressable>
           );

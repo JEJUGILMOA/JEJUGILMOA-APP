@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -55,24 +56,24 @@ export default function ActiveTripEmptySheet({
         <View style={styles.iconBubble}>
           <MapPinIcon color={MapTokens.textMuted} size={28} />
         </View>
-        <Text style={styles.title}>진행중인 여행이 없어요</Text>
-        <Text style={styles.desc}>
+        <MapText style={styles.title}>진행중인 여행이 없어요</MapText>
+        <MapText style={styles.desc}>
           계획을 시작한 뒤 이동 경로와 목적지를{'\n'}지도에서 바로 확인할 수 있어요
-        </Text>
+        </MapText>
         <View style={styles.actions}>
           <Pressable
             style={styles.secondaryBtn}
             onPress={onGoGeneralMap}
             accessibilityRole="button"
           >
-            <Text style={styles.secondaryText}>일반 지도로</Text>
+            <MapText style={styles.secondaryText}>일반 지도로</MapText>
           </Pressable>
           <Pressable
             style={styles.primaryBtn}
             onPress={handleStartTrip}
             accessibilityRole="button"
           >
-            <Text style={styles.primaryText}>내 계획 보기</Text>
+            <MapText style={styles.primaryText}>내 계획 보기</MapText>
           </Pressable>
         </View>
       </BottomSheetView>

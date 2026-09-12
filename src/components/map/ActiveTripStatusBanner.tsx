@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 
 import { MapTokens } from '../../constants/map';
 import { CloseIcon, FlagIcon } from './MapIcons';
@@ -19,11 +20,11 @@ export default function ActiveTripStatusBanner({
   return (
     <View style={[styles.wrap, { top: topOffset }]}>
       <FlagIcon color={MapTokens.coral} size={16} />
-      <Text style={styles.text} numberOfLines={1}>
+      <MapText style={styles.text} numberOfLines={1}>
         진행중 여행 지도 표시 중
-      </Text>
+      </MapText>
       <Pressable onPress={onPressOtherMap} hitSlop={6}>
-        <Text style={styles.link}>다른 지도</Text>
+        <MapText style={styles.link}>다른 지도</MapText>
       </Pressable>
       <Pressable onPress={onDismiss} hitSlop={8} style={styles.closeBtn}>
         <CloseIcon color={MapTokens.textMuted} size={16} />

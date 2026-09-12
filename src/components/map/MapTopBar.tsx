@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapTokens } from '../../constants/map';
@@ -22,9 +23,9 @@ export default function MapTopBar({
     <View style={[styles.wrap, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
       <Pressable style={styles.search} onPress={onPressSearch} accessibilityRole="button">
         <SearchIcon color={MapTokens.textMuted} size={18} />
-        <Text style={styles.searchText} numberOfLines={1}>
+        <MapText style={styles.searchText} numberOfLines={1}>
           {searchLabel}
-        </Text>
+        </MapText>
       </Pressable>
       <Pressable
         style={styles.menu}

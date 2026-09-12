@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 
 import { MapTokens } from '../../constants/map';
 import type { Place } from '../../types/map';
@@ -36,25 +37,25 @@ export default function VisitCompleteModal({
           <View style={styles.checkBubble}>
             <CheckIcon color={MapTokens.green} size={28} />
           </View>
-          <Text style={styles.title}>방문 인증이 완료되었어요</Text>
+          <MapText style={styles.title}>방문 인증이 완료되었어요</MapText>
 
           <View style={styles.placeCard}>
             <View style={styles.thumb}>
               <CategoryIcon category={place.category} color={MapTokens.amber} size={22} />
             </View>
             <View style={styles.placeTexts}>
-              <Text style={styles.placeName}>{place.name}</Text>
-              <Text style={styles.placeMeta}>
+              <MapText style={styles.placeName}>{place.name}</MapText>
+              <MapText style={styles.placeMeta}>
                 {verifiedAtLabel} · {orderLabel}
-              </Text>
+              </MapText>
             </View>
           </View>
 
           <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>여행 진행률</Text>
-            <Text style={styles.progressValue}>
+            <MapText style={styles.progressLabel}>여행 진행률</MapText>
+            <MapText style={styles.progressValue}>
               {visitedCount} / {totalStops} 방문
-            </Text>
+            </MapText>
           </View>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${Math.min(progress, 1) * 100}%` }]} />
@@ -62,10 +63,10 @@ export default function VisitCompleteModal({
 
           <View style={styles.actions}>
             <Pressable style={styles.secondaryBtn} onPress={onAddPhoto}>
-              <Text style={styles.secondaryText}>사진 추가</Text>
+              <MapText style={styles.secondaryText}>사진 추가</MapText>
             </Pressable>
             <Pressable style={styles.primaryBtn} onPress={onNextDestination}>
-              <Text style={styles.primaryText}>다음 목적지</Text>
+              <MapText style={styles.primaryText}>다음 목적지</MapText>
             </Pressable>
           </View>
         </View>

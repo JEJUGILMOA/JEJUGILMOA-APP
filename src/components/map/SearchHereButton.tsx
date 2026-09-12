@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 
 import { MapTokens } from '../../constants/map';
 
@@ -21,7 +22,7 @@ export default function SearchHereButton({
         accessibilityRole="button"
         accessibilityLabel="현 위치에서 검색"
       >
-        <Text style={styles.label}>현 위치에서 검색</Text>
+        <MapText style={styles.label}>현 위치에서 검색</MapText>
       </Pressable>
     </View>
   );

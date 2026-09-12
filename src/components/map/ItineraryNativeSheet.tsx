@@ -1,5 +1,6 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 import BottomSheet, { BottomSheetView, type BottomSheetHandleProps } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SharedValue } from 'react-native-reanimated';
@@ -112,7 +113,7 @@ export function ItinerarySheetExpandChip({
   return (
     <View pointerEvents="box-none" style={[styles.expandWrap, { bottom }]}>
       <Pressable style={styles.expand} onPress={onPress} accessibilityLabel="일정 펼치기">
-        <Text style={styles.expandLabel}>▲  펼치기</Text>
+        <MapText style={styles.expandLabel}>▲  펼치기</MapText>
       </Pressable>
     </View>
   );

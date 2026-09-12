@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 
 import { CATEGORY_CHIPS, MapTokens, type PlaceCategory } from '../../constants/map';
 import { CategoryIcon } from './MapIcons';
@@ -32,7 +33,7 @@ export default function CategoryChips({
               onPress={() => onSelect(chip.id)}
             >
               <CategoryIcon category={chip.id} color={iconColor} size={14} />
-              <Text style={[styles.label, active && styles.labelActive]}>{chip.label}</Text>
+              <MapText style={[styles.label, active && styles.labelActive]}>{chip.label}</MapText>
             </Pressable>
           );
         })}

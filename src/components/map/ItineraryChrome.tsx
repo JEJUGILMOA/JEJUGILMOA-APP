@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 import { Path, Svg } from 'react-native-svg';
 
 import type { PlanItineraryChromeState } from '../../bridge/webviewBridge';
@@ -41,9 +42,9 @@ export default function ItineraryChrome({
           >
             <ChevronIcon direction="left" size={18} muted={chrome.day <= 1} />
           </Pressable>
-          <Text style={styles.pagerLabel} numberOfLines={1}>
+          <MapText style={styles.pagerLabel} numberOfLines={1}>
             Day {chrome.day} · {chrome.dateLabel}
-          </Text>
+          </MapText>
           <Pressable
             style={styles.pagerArrow}
             onPress={() => onDayChange(Math.min(chrome.day + 1, chrome.totalDays))}
@@ -55,7 +56,7 @@ export default function ItineraryChrome({
         </View>
         {chrome.nextLabel ? (
           <Pressable style={styles.next} onPress={onNext}>
-            <Text style={styles.nextLabel}>{chrome.nextLabel}</Text>
+            <MapText style={styles.nextLabel}>{chrome.nextLabel}</MapText>
           </Pressable>
         ) : (
           <View style={styles.circleSpacer} />

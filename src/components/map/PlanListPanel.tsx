@@ -1,12 +1,6 @@
 import React from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 
 import type { TravelPlanSummary } from '../../api/plans';
 import { MapTokens } from '../../constants/map';
@@ -33,19 +27,19 @@ export default function PlanListPanel({
   return (
     <View style={styles.panel}>
       <View style={styles.header}>
-        <Text style={styles.title}>내 계획</Text>
-        <Text style={styles.subtitle}>지도에 표시할 여행을 선택하세요</Text>
+        <MapText style={styles.title}>내 계획</MapText>
+        <MapText style={styles.subtitle}>지도에 표시할 여행을 선택하세요</MapText>
       </View>
 
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator color={MapTokens.green} />
-          <Text style={styles.hint}>계획을 불러오는 중…</Text>
+          <MapText style={styles.hint}>계획을 불러오는 중…</MapText>
         </View>
       ) : plans.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>아직 계획이 없어요</Text>
-          <Text style={styles.hint}>계획 탭에서 여행을 만들어 보세요</Text>
+          <MapText style={styles.emptyTitle}>아직 계획이 없어요</MapText>
+          <MapText style={styles.hint}>계획 탭에서 여행을 만들어 보세요</MapText>
         </View>
       ) : (
         <ScrollView
@@ -62,24 +56,24 @@ export default function PlanListPanel({
             >
               <View style={styles.rowBody}>
                 <View style={styles.titleRow}>
-                  <Text style={styles.planTitle} numberOfLines={1}>
+                  <MapText style={styles.planTitle} numberOfLines={1}>
                     {plan.title}
-                  </Text>
+                  </MapText>
                   <View style={styles.statusBadge}>
-                    <Text style={styles.statusText}>
+                    <MapText style={styles.statusText}>
                       {planStatusLabel(plan.status)}
-                    </Text>
+                    </MapText>
                   </View>
                 </View>
-                <Text style={styles.meta} numberOfLines={1}>
+                <MapText style={styles.meta} numberOfLines={1}>
                   {formatPlanDurationLabel(plan.nights, plan.days)} · 장소{' '}
                   {plan.waypointCount}곳 · {formatPlanDDay(plan.dDay)}
-                </Text>
-                <Text style={styles.dates} numberOfLines={1}>
+                </MapText>
+                <MapText style={styles.dates} numberOfLines={1}>
                   {plan.startDate} ~ {plan.endDate}
-                </Text>
+                </MapText>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <MapText style={styles.chevron}>›</MapText>
             </Pressable>
           ))}
         </ScrollView>

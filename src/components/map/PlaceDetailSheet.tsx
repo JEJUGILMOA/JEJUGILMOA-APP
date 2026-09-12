@@ -1,13 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import {
-  Alert,
-  Image,
-  Linking,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, Image, Linking, Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -97,19 +90,19 @@ export default function PlaceDetailSheet({
       >
         {/* 1. 제목 */}
         <View style={styles.titleRow}>
-          <Text style={styles.name} numberOfLines={1}>
+          <MapText style={styles.name} numberOfLines={1}>
             {place.name}
-          </Text>
+          </MapText>
           {place.rating != null ? (
             <View style={styles.ratingRow}>
               <StarIcon color={MapTokens.amber} size={14} />
-              <Text style={styles.rating}>{place.rating.toFixed(1)}</Text>
+              <MapText style={styles.rating}>{place.rating.toFixed(1)}</MapText>
             </View>
           ) : null}
         </View>
 
         {/* 2. 카테고리 */}
-        <Text style={styles.category}>{categoryLabel}</Text>
+        <MapText style={styles.category}>{categoryLabel}</MapText>
 
         {/* 3. 버튼 */}
         <View style={styles.actions}>
@@ -119,7 +112,7 @@ export default function PlaceDetailSheet({
             accessibilityRole="button"
             accessibilityLabel="목적지로 설정"
           >
-            <Text style={styles.secondaryBtnText}>목적지로 설정</Text>
+            <MapText style={styles.secondaryBtnText}>목적지로 설정</MapText>
           </Pressable>
           <Pressable
             style={styles.primaryBtn}
@@ -127,7 +120,7 @@ export default function PlaceDetailSheet({
             accessibilityRole="button"
             accessibilityLabel="코스에 추가"
           >
-            <Text style={styles.primaryBtnText}>+ 코스에 추가</Text>
+            <MapText style={styles.primaryBtnText}>+ 코스에 추가</MapText>
           </Pressable>
         </View>
 
@@ -146,27 +139,27 @@ export default function PlaceDetailSheet({
               </View>
             )}
             <View style={styles.photoBadge}>
-              <Text style={styles.photoBadgeText}>{photoLabel}</Text>
+              <MapText style={styles.photoBadgeText}>{photoLabel}</MapText>
             </View>
           </View>
 
           {place.address ? (
-            <Text style={styles.address} numberOfLines={2}>
+            <MapText style={styles.address} numberOfLines={2}>
               {place.address}
-            </Text>
+            </MapText>
           ) : null}
 
           <View style={styles.infoBlock}>
             {place.hoursLabel ? (
               <View style={styles.infoRow}>
                 <ClockIcon color={MapTokens.textMuted} size={15} />
-                <Text style={styles.infoText}>{place.hoursLabel}</Text>
+                <MapText style={styles.infoText}>{place.hoursLabel}</MapText>
               </View>
             ) : null}
             {place.phone ? (
               <Pressable style={styles.infoRow} onPress={handleCall}>
                 <PhoneIcon color={MapTokens.textMuted} size={15} />
-                <Text style={[styles.infoText, styles.phoneText]}>{place.phone}</Text>
+                <MapText style={[styles.infoText, styles.phoneText]}>{place.phone}</MapText>
               </Pressable>
             ) : null}
             <View style={styles.expandHint}>
@@ -176,9 +169,9 @@ export default function PlaceDetailSheet({
 
           {place.description ? (
             <View style={styles.descBox}>
-              <Text style={styles.desc} numberOfLines={3}>
+              <MapText style={styles.desc} numberOfLines={3}>
                 {place.description}
-              </Text>
+              </MapText>
               <ChevronDownIcon color={MapTokens.textMuted} size={16} />
             </View>
           ) : null}

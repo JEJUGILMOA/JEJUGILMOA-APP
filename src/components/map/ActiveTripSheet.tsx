@@ -1,17 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Linking,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, Dimensions, Linking, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -139,12 +128,12 @@ export default function ActiveTripSheet({
     >
       <BottomSheetView style={[styles.content, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.headerRow}>
-          <Text style={styles.tripMeta} numberOfLines={1}>
+          <MapText style={styles.tripMeta} numberOfLines={1}>
             {tripTitle} · {dayLabel}
-          </Text>
-          <Text style={styles.visitCount}>
+          </MapText>
+          <MapText style={styles.visitCount}>
             {visitedCount} / {totalStops} 방문
-          </Text>
+          </MapText>
         </View>
 
         <ScrollView
@@ -170,20 +159,20 @@ export default function ActiveTripSheet({
                   />
                 </View>
                 <View style={styles.cardBody}>
-                  <Text style={styles.orderLabel}>{stop.order}번째 목적지</Text>
-                  <Text style={styles.placeName} numberOfLines={1}>
+                  <MapText style={styles.orderLabel}>{stop.order}번째 목적지</MapText>
+                  <MapText style={styles.placeName} numberOfLines={1}>
                     {stop.place.name}
-                  </Text>
+                  </MapText>
                   <View style={styles.metaRow}>
                     {stop.transport === 'walk' ? (
                       <WalkIcon color={MapTokens.textMuted} size={12} />
                     ) : (
                       <CarIcon color={MapTokens.textMuted} size={12} />
                     )}
-                    <Text style={styles.metaText}>
+                    <MapText style={styles.metaText}>
                       {transportLabel} {stop.travelMinutes}분 · {stop.distanceMeters}m ·{' '}
                       {stop.scheduledTime} 예정
-                    </Text>
+                    </MapText>
                   </View>
                 </View>
               </View>
@@ -210,7 +199,7 @@ export default function ActiveTripSheet({
             onPress={handleDirections}
             accessibilityRole="button"
           >
-            <Text style={styles.secondaryText}>길찾기</Text>
+            <MapText style={styles.secondaryText}>길찾기</MapText>
           </Pressable>
           <Pressable
             style={[styles.primaryBtn, !verifyEnabled && styles.primaryBtnDisabled]}
@@ -218,7 +207,7 @@ export default function ActiveTripSheet({
             accessibilityRole="button"
           >
             <CheckIcon color="#FFFFFF" size={16} />
-            <Text style={styles.primaryText}>방문 인증하기</Text>
+            <MapText style={styles.primaryText}>방문 인증하기</MapText>
           </Pressable>
         </View>
       </BottomSheetView>

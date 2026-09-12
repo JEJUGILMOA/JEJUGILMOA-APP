@@ -1,13 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import MapText from './MapText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapTokens } from '../../constants/map';
@@ -34,23 +27,23 @@ function HighlightName({
   query: string;
 }): React.JSX.Element {
   if (!query.trim()) {
-    return <Text style={styles.resultName}>{name}</Text>;
+    return <MapText style={styles.resultName}>{name}</MapText>;
   }
   const lower = name.toLowerCase();
   const q = query.trim().toLowerCase();
   const idx = lower.indexOf(q);
   if (idx < 0) {
-    return <Text style={styles.resultName}>{name}</Text>;
+    return <MapText style={styles.resultName}>{name}</MapText>;
   }
   const before = name.slice(0, idx);
   const match = name.slice(idx, idx + q.length);
   const after = name.slice(idx + q.length);
   return (
-    <Text style={styles.resultName}>
+    <MapText style={styles.resultName}>
       {before}
-      <Text style={styles.highlight}>{match}</Text>
+      <MapText style={styles.highlight}>{match}</MapText>
       {after}
-    </Text>
+    </MapText>
   );
 }
 
@@ -166,15 +159,15 @@ export default function SearchModal({
             ) : null}
           </View>
           <Pressable onPress={handleClose} hitSlop={8}>
-            <Text style={styles.cancel}>취소</Text>
+            <MapText style={styles.cancel}>취소</MapText>
           </Pressable>
         </View>
 
         {!showResults ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>최근 검색</Text>
+            <MapText style={styles.sectionTitle}>최근 검색</MapText>
             {recentSearches.length === 0 ? (
-              <Text style={styles.empty}>최근 검색 기록이 없어요.</Text>
+              <MapText style={styles.empty}>최근 검색 기록이 없어요.</MapText>
             ) : (
               recentSearches.map((term) => (
                 <View key={term} style={styles.recentRow}>
@@ -183,9 +176,9 @@ export default function SearchModal({
                     onPress={() => handleSelectRecent(term)}
                   >
                     <ClockIcon color={MapTokens.textMuted} size={16} />
-                    <Text style={styles.recentText} numberOfLines={1}>
+                    <MapText style={styles.recentText} numberOfLines={1}>
                       {term}
-                    </Text>
+                    </MapText>
                   </Pressable>
                   <Pressable
                     style={styles.recentRemove}
@@ -202,13 +195,13 @@ export default function SearchModal({
           </View>
         ) : (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>검색 결과</Text>
+            <MapText style={styles.sectionTitle}>검색 결과</MapText>
             <FlatList
               data={results}
               keyExtractor={(item) => item.id}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
-                <Text style={styles.empty}>일치하는 장소가 없어요.</Text>
+                <MapText style={styles.empty}>일치하는 장소가 없어요.</MapText>
               }
               renderItem={({ item }) => (
                 <Pressable
@@ -231,7 +224,7 @@ export default function SearchModal({
                   <View style={styles.resultTexts}>
                     <HighlightName name={item.name} query={submittedQuery} />
                     {item.address ? (
-                      <Text style={styles.resultAddr}>{item.address}</Text>
+                      <MapText style={styles.resultAddr}>{item.address}</MapText>
                     ) : null}
                   </View>
                 </Pressable>

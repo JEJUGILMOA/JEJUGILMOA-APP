@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import MapText from './MapText';
 import {
   ConfettiCanvas,
   presets,
@@ -83,21 +84,21 @@ export default function BadgeUnlockModal({
         />
         <View style={styles.card}>
           <View style={styles.hero}>
-            <Text style={styles.heroLabel}>NEW BADGE</Text>
+            <MapText style={styles.heroLabel}>NEW BADGE</MapText>
             <View style={styles.medal}>
               <StarIcon color="#FFFFFF" size={36} />
             </View>
           </View>
 
           <View style={styles.body}>
-            <Text style={styles.title}>{badge.title}</Text>
-            <Text style={styles.desc}>{badge.description}</Text>
+            <MapText style={styles.title}>{badge.title}</MapText>
+            <MapText style={styles.desc}>{badge.description}</MapText>
 
             <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>배지 수집 현황</Text>
-              <Text style={styles.progressValue}>
+              <MapText style={styles.progressLabel}>배지 수집 현황</MapText>
+              <MapText style={styles.progressValue}>
                 {badge.collected} / {badge.total}
-              </Text>
+              </MapText>
             </View>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${Math.min(progress, 1) * 100}%` }]} />
@@ -106,20 +107,20 @@ export default function BadgeUnlockModal({
             <View style={styles.badgeRow}>
               {recentLabels.map((label) => (
                 <View key={label} style={styles.badgeChip}>
-                  <Text style={styles.badgeChipText}>{label}</Text>
+                  <MapText style={styles.badgeChipText}>{label}</MapText>
                 </View>
               ))}
               <View style={styles.moreChip}>
-                <Text style={styles.moreText}>+{extraCount}</Text>
+                <MapText style={styles.moreText}>+{extraCount}</MapText>
               </View>
             </View>
 
             <View style={styles.actions}>
               <Pressable style={styles.secondaryBtn} onPress={onShare}>
-                <Text style={styles.secondaryText}>자랑하기</Text>
+                <MapText style={styles.secondaryText}>자랑하기</MapText>
               </Pressable>
               <Pressable style={styles.primaryBtn} onPress={onConfirm}>
-                <Text style={styles.primaryText}>확인</Text>
+                <MapText style={styles.primaryText}>확인</MapText>
               </Pressable>
             </View>
           </View>
