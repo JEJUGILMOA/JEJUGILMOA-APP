@@ -58,9 +58,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#24B95C',
+        // JS SplashScreen(LoginColors.white)과 동일 — 전환 시 색 깜빡임 방지
+        backgroundColor: '#FFFFFF',
         image: './assets/images/splash-icon2.png',
-        imageWidth: 76,
+        imageWidth: 200,
       },
     ],
     // 네이버맵 Expo config plugin
