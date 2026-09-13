@@ -297,8 +297,9 @@ export default function WebViewScreen({ path, tabName }: Props) {
         router.navigate('/(tabs)/map');
       },
       onNavigateToTab: ({ tab, path }) => {
+        const pendingTab = tab === 'home' ? 'index' : tab;
         if (path) {
-          setPendingWebPath(tab, path);
+          setPendingWebPath(pendingTab, path);
         }
         if (tab === 'home') {
           router.navigate('/(tabs)');
