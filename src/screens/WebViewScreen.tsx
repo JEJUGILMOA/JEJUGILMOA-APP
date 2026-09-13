@@ -1,8 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import {
+  WebView,
+  type WebViewMessageEvent,
+  type WebViewNavigation,
+} from 'react-native-webview';
 import { router, useFocusEffect } from 'expo-router';
 
 import { clearStoredWebAuth, getStoredWebAuth, setStoredWebAuth } from '../auth/webAuthSession';
@@ -34,7 +45,8 @@ import { WEB_BASE_URL } from '../constants/config';
 import { TabBarTokens } from '../constants/tabs';
 import { useAuth } from '../context/AuthContext';
 import { setPendingNativeToast, takePendingNativeToast } from '../nativeToastQueue';
-import { takePendingWebPath } from '../pendingWebPath';
+import { setPendingMapMode } from '../pendingMapMode';
+import { setPendingWebPath, takePendingWebPath } from '../pendingWebPath';
 import { useTabRepress } from '../hooks/useTabRepress';
 import type { MapBounds } from '../api/map';
 import { JEJU_DEFAULT_BOUNDS } from '../utils/mapBounds';
@@ -270,6 +282,30 @@ export default function WebViewScreen({ path, tabName }: Props) {
       onWebReady: () => {
         injectStoredWebAuthToWeb(webviewRef.current, getStoredWebAuth());
       },
+      onNavigateToMap: (payload) => {
+        const mode = payload?.mode;
+        if (
+          mode === 'general' ||
+          mode === 'plan' ||
+          mode === 'activeTrip' ||
+          mode === 'heatmap'
+        ) {
+          setPendingMapMode(mode);
+        } else {
+          setPendingMapMode('general');
+        }
+        router.navigate('/(tabs)/map');
+      },
+      onNavigateToTab: ({ tab, path }) => {
+        if (path) {
+          setPendingWebPath(tab, path);
+        }
+        if (tab === 'home') {
+          router.navigate('/(tabs)');
+          return;
+        }
+        router.navigate(`/(tabs)/${tab}`);
+      },
       onSetPlanSummaries: ({ plans, error }) => {
         setPlanListFromWeb(plans, error);
       },
@@ -292,6 +328,29 @@ export default function WebViewScreen({ path, tabName }: Props) {
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
     });
     injectStoredWebAuthToWeb(webviewRef.current, getStoredWebAuth());
+  }, []);
+
+  const onWebError = useCallback((event: { nativeEvent: { code?: number; description?: string } }) => {
+    console.warn('[WebView] load error', event.nativeEvent.code, event.nativeEvent.description);
+  }, []);
+
+  /** http(s)·about 외 메인 프레임 이동은 iOS에서 "Load Failed"로 깨지기 쉬워 차단 */
+  const onShouldStartLoadWithRequest = useCallback((request: WebViewNavigation) => {
+    const url = request.url ?? '';
+    if (
+      url.startsWith('http://') ||
+      url.startsWith('https://') ||
+      url.startsWith('about:') ||
+      url === 'blank'
+    ) {
+      return true;
+    }
+    console.warn('[WebView] blocked navigation', url.slice(0, 120));
+    return false;
+  }, []);
+
+  const reloadWebView = useCallback(() => {
+    webviewRef.current?.reload();
   }, []);
 
   useTabRepress(
@@ -462,16 +521,50 @@ export default function WebViewScreen({ path, tabName }: Props) {
           overScrollMode="content"
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
+          javaScriptEnabled
+          domStorageEnabled
+          originWhitelist={['*']}
+          setSupportMultipleWindows={false}
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          mixedContentMode="always"
           source={{ uri }}
           key={uri}
           onMessage={onMessage}
           onLoadEnd={onLoadEnd}
+          onError={onWebError}
+          onHttpError={(event) => {
+            if (event.nativeEvent.statusCode >= 500) {
+              console.warn('[WebView] http error', event.nativeEvent.statusCode, event.nativeEvent.url);
+            }
+          }}
+          onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
           startInLoadingState={!itineraryMode}
           injectedJavaScriptBeforeContentLoaded={HIDE_WEB_CHROME}
           injectedJavaScript={HIDE_WEB_CHROME}
           renderLoading={() => (
             <View style={styles.loading}>
               <ActivityIndicator size="large" color={TabBarTokens.active} />
+            </View>
+          )}
+          renderError={(_domain, _code, description) => (
+            <View style={styles.error}>
+              <Text style={styles.errorTitle}>페이지를 불러오지 못했어요</Text>
+              <Text style={styles.errorBody}>
+                네트워크 상태를 확인한 뒤 다시 시도해 주세요.
+              </Text>
+              {__DEV__ && description ? (
+                <Text style={styles.errorDetail} numberOfLines={3}>
+                  {description}
+                </Text>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                onPress={reloadWebView}
+                style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
+              >
+                <Text style={styles.retryLabel}>다시 시도</Text>
+              </Pressable>
             </View>
           )}
         />
@@ -532,5 +625,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  error: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 32,
+    backgroundColor: '#fff',
+  },
+  errorTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#212529',
+    textAlign: 'center',
+  },
+  errorBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#5B5C60',
+    textAlign: 'center',
+  },
+  errorDetail: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#9C9C97',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    minHeight: 44,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: TabBarTokens.active,
+  },
+  retryButtonPressed: {
+    opacity: 0.85,
+  },
+  retryLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

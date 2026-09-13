@@ -5,11 +5,10 @@ import {
   NaverMapCircleOverlay,
   NaverMapMarkerOverlay,
   NaverMapPathOverlay,
-  NaverMapPolylineOverlay,
   NaverMapView,
   type NaverMapViewRef,
 } from '@mj-studio/react-native-naver-map';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { fetchMapHeatmap, fetchMapPlaces, type MapBounds } from '../api/map';
 import { type TravelPlanSummary } from '../api/plans';
@@ -22,6 +21,7 @@ import {
   subscribeMapPlanDetail,
   subscribeMapTrip,
 } from '../bridge/mapDataStore';
+import type { MapTripFromWeb } from '../bridge/mapBridgeTypes';
 import {
   markPlanListLoading,
   subscribePlanList,
@@ -70,6 +70,7 @@ import {
   type ActiveTripStop,
 } from '../data/mapDummy';
 import { setPendingWebPath } from '../pendingWebPath';
+import { takePendingMapMode } from '../pendingMapMode';
 import type { HeatZone, Place, PlanTravelLeg, PlanWaypoint } from '../types/map';
 import {
   dayPathsFromWaypoints,
@@ -78,14 +79,13 @@ import {
 } from '../utils/planMapMappers';
 import { categoryFromApiName } from '../utils/mapMappers';
 import {
-  canVerifyAtLocation,
   deriveTripProgress,
-  formatTripDayLabel,
   formatVerifiedAt,
   mapTripWaypointsToStops,
   type TripMapCoord,
 } from '../utils/tripMapMappers';
 import { getDeviceCoordinates } from '../utils/deviceLocation';
+import { isTripVisitSpoofEnabled, initTripVisitSpoof } from '../utils/tripVisitSpoof';
 import {
   boundsEqual,
   boundsFromRegion,
@@ -114,8 +114,6 @@ const PLAN_BOUNDS_MIN_DELTA = 0.02;
 /** 진행중 여행 시트 높이 대략값 — FAB 오프셋용 */
 const ACTIVE_TRIP_SHEET_FAB_OFFSET = 300;
 const ACTIVE_EMPTY_SHEET_FAB_OFFSET = 260;
-const ACTIVE_REMAINING_PATH_COLOR = '#5EC4C8';
-const ACTIVE_UPCOMING_PATH_COLOR = '#B0B8C8';
 const ACTIVE_LOCATION_PULSE = 'rgba(30, 79, 196, 0.18)';
 const ACTIVE_LOCATION_DOT = MapTokens.blue;
 /** 한 번에 가져올 장소 수 (화면이 과밀해지지 않도록) */
@@ -128,62 +126,36 @@ function toSearchArea(bounds: MapBounds): MapBounds {
   return roundBounds(shrinkBounds(bounds, SEARCH_BOUNDS_RATIO));
 }
 
-function activeTripStopSymbol(
-  status: ActiveTripStop['status'],
-): 'green' | 'gray' | 'lightblue' {
-  switch (status) {
-    case 'visited':
-      return 'gray';
-    case 'current':
-      return 'green';
-    default:
-      return 'lightblue';
-  }
-}
-
-type MapCoord = { latitude: number; longitude: number };
-
-/** 경유지 순서대로 경로 선분 생성 (지나온/남은/예정) */
-function buildActiveTripPaths(
-  stops: ActiveTripStop[],
-  currentIndex: number,
-  currentLocation: MapCoord,
-): {
-  traveled: MapCoord[];
-  remaining: MapCoord[];
-  upcoming: MapCoord[];
-} {
-  const stopCoords = stops.map((s) => ({
-    latitude: s.place.latitude,
-    longitude: s.place.longitude,
-  }));
-
-  const traveled = [
-    ...stopCoords.slice(0, currentIndex),
-    currentLocation,
-  ];
-
-  const remaining = [currentLocation, stopCoords[currentIndex]!];
-
-  const upcoming =
-    currentIndex < stopCoords.length - 1
-      ? stopCoords.slice(currentIndex)
-      : [];
-
-  return { traveled, remaining, upcoming };
-}
-
 export default function MapScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<NaverMapViewRef>(null);
   const skipPlanEnterResetRef = useRef(false);
   const { isAuthenticated } = useAuth();
 
+  useEffect(() => {
+    if (__DEV__) {
+      void initTripVisitSpoof();
+    }
+  }, []);
+
   const [mode, setMode] = useState<MapMode>('general');
   const [category, setCategory] = useState<PlaceCategory>('all');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [modeSheetOpen, setModeSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // 웹에서 NAVIGATE_TO_MAP(mode)로 넘어온 경우 포커스 시 모드 적용
+  useFocusEffect(
+    useCallback(() => {
+      const pendingMode = takePendingMapMode();
+      if (pendingMode) {
+        setMode(pendingMode);
+        setSelectedPlace(null);
+        setModeSheetOpen(false);
+        setSearchOpen(false);
+      }
+    }, []),
+  );
   const [planView, setPlanView] = useState<'list' | 'detail'>('list');
   const [planSummaries, setPlanSummaries] = useState<TravelPlanSummary[]>([]);
   const [planListLoading, setPlanListLoading] = useState(false);
@@ -208,9 +180,14 @@ export default function MapScreen(): React.JSX.Element {
   const [tripMeta, setTripMeta] = useState<CurrentTripDto | null>(null);
   const [tripLoading, setTripLoading] = useState(false);
   const [tripUserLocation, setTripUserLocation] = useState<TripMapCoord | null>(null);
-  const [canVerifyVisit, setCanVerifyVisit] = useState(false);
-  const [tripDayLabel, setTripDayLabel] = useState('');
   const [userLocationVisible, setUserLocationVisible] = useState(false);
+  /** null이면 전체 일차 표시 */
+  const [selectedTripDayNumber, setSelectedTripDayNumber] = useState<number | null>(null);
+  const [selectedTripStopId, setSelectedTripStopId] = useState<string | null>(null);
+  /** API READY 도로 경로. 없으면 직선 폴백 */
+  const [tripApiDayRoutes, setTripApiDayRoutes] = useState<
+    { dayNumber: number; coords: { latitude: number; longitude: number }[] }[]
+  >([]);
   const pendingVisitStopRef = useRef<ActiveTripStop | null>(null);
   const [visitModalOpen, setVisitModalOpen] = useState(false);
   const [badgeModalOpen, setBadgeModalOpen] = useState(false);
@@ -346,12 +323,40 @@ export default function MapScreen(): React.JSX.Element {
     return null;
   }, [tripUserLocation, tripStops, tripCurrentIndex]);
 
-  const activeTripPaths = useMemo(() => {
-    if (!tripLocation) {
-      return { traveled: [], remaining: [], upcoming: [] };
+  /** 일차 내 순번 (핀 숫자) */
+  const tripDayOrderById = useMemo(() => {
+    const orders = new Map<string, number>();
+    const counts = new Map<number, number>();
+    for (const stop of tripStops) {
+      const day = stop.dayNumber ?? 1;
+      const next = (counts.get(day) ?? 0) + 1;
+      counts.set(day, next);
+      orders.set(stop.id, next);
     }
-    return buildActiveTripPaths(tripStops, tripCurrentIndex, tripLocation);
-  }, [tripStops, tripCurrentIndex, tripLocation]);
+    return orders;
+  }, [tripStops]);
+
+  const tripDayRoutes = useMemo(() => {
+    if (tripApiDayRoutes.length > 0) return tripApiDayRoutes;
+    // API 경로가 없을 때만 경유지 직선 폴백
+    return dayPathsFromWaypoints(
+      tripStops.map((stop) => ({
+        dayNumber: stop.dayNumber,
+        latitude: stop.place.latitude,
+        longitude: stop.place.longitude,
+      })),
+    );
+  }, [tripApiDayRoutes, tripStops]);
+
+  const visibleTripDayRoutes = useMemo(() => {
+    if (selectedTripDayNumber == null) return tripDayRoutes;
+    return tripDayRoutes.filter((route) => route.dayNumber === selectedTripDayNumber);
+  }, [tripDayRoutes, selectedTripDayNumber]);
+
+  const visibleTripStops = useMemo(() => {
+    if (selectedTripDayNumber == null) return tripStops;
+    return tripStops.filter((stop) => stop.dayNumber === selectedTripDayNumber);
+  }, [tripStops, selectedTripDayNumber]);
 
   const fabBottomOffset = isPlanMode
     ? 16
@@ -385,6 +390,9 @@ export default function MapScreen(): React.JSX.Element {
       setPlanDayRoutes([]);
       setSelectedPlanId(null);
       setSelectedPlanDayNumber(null);
+      setSelectedTripDayNumber(null);
+      setSelectedTripStopId(null);
+      setTripApiDayRoutes([]);
       setVisitModalOpen(false);
       setBadgeModalOpen(false);
       setVerifiedStop(null);
@@ -613,25 +621,40 @@ export default function MapScreen(): React.JSX.Element {
     router.navigate('/(tabs)/plan');
   }, [selectedTravelPlan?.planId]);
 
-  const applyTripFromWeb = useCallback((trip: CurrentTripDto | null) => {
+  const applyTripFromWeb = useCallback((trip: MapTripFromWeb | null) => {
     if (!trip) {
       setTripMeta(null);
       setTripStops([]);
       setTripCurrentIndex(0);
       setTripVisitedCount(0);
-      setTripDayLabel('');
-      setCanVerifyVisit(false);
+      setSelectedTripDayNumber(null);
+      setSelectedTripStopId(null);
+      setTripApiDayRoutes([]);
       return;
     }
     const stops = mapTripWaypointsToStops(trip.waypoints ?? []);
     const progress = deriveTripProgress(stops);
-    setTripMeta(trip);
+    setTripMeta({
+      tripId: trip.tripId,
+      title: trip.title,
+      status: trip.status,
+      actualStartedAt: trip.actualStartedAt,
+      waypoints: trip.waypoints,
+    });
     setTripStops(stops);
     setTripCurrentIndex(progress.currentIndex);
     setTripVisitedCount(progress.visitedCount);
-    setTripDayLabel(formatTripDayLabel(trip, progress.currentStop));
-    setCanVerifyVisit(canVerifyAtLocation(tripUserLocation, progress.currentStop));
-  }, [tripUserLocation]);
+    const current = stops[progress.currentIndex];
+    setSelectedTripDayNumber(current?.dayNumber ?? stops[0]?.dayNumber ?? 1);
+    setSelectedTripStopId(current?.id ?? stops[0]?.id ?? null);
+    const fromApi = (trip.dayRoutes ?? [])
+      .filter((route) => route.path.length >= 2)
+      .map((route) => ({
+        dayNumber: route.dayNumber,
+        coords: route.path,
+      }));
+    setTripApiDayRoutes(fromApi);
+  }, []);
 
   useEffect(() => {
     if (mode !== 'activeTrip') {
@@ -649,7 +672,9 @@ export default function MapScreen(): React.JSX.Element {
     return subscribeMapTrip((next) => {
       setTripLoading(next.loading);
       if (next.visitError) {
-        Alert.alert('방문 인증 실패', next.visitError);
+        Alert.alert('여행 진행 실패', next.visitError);
+        // 긴 raw JSON도 Metro/Logcat에서 볼 수 있게 남긴다
+        console.warn('[map] visit/skip error detail\n', next.visitError);
         clearTripVisitError();
       }
       if (next.completeResult) {
@@ -675,13 +700,7 @@ export default function MapScreen(): React.JSX.Element {
         return;
       }
       if (next.trip) {
-        applyTripFromWeb({
-          tripId: next.trip.tripId,
-          title: next.trip.title,
-          status: next.trip.status,
-          actualStartedAt: next.trip.actualStartedAt,
-          waypoints: next.trip.waypoints,
-        });
+        applyTripFromWeb(next.trip);
         const pending = pendingVisitStopRef.current;
         if (pending && !next.visitError) {
           const updated = (next.trip.waypoints ?? []).find(
@@ -702,9 +721,30 @@ export default function MapScreen(): React.JSX.Element {
 
   const handleSelectTripStop = useCallback(
     (stop: ActiveTripStop, _index: number) => {
+      setSelectedTripStopId(stop.id);
+      setSelectedTripDayNumber(stop.dayNumber);
       animateTo(stop.place.latitude, stop.place.longitude, 13);
     },
     [animateTo],
+  );
+
+  const handleSelectTripDay = useCallback(
+    (dayNumber: number, dayStops: ActiveTripStop[]) => {
+      setSelectedTripDayNumber(dayNumber);
+      if (dayStops.length === 0) return;
+      fitPlanWaypoints(
+        dayStops.map((stop) => ({
+          id: stop.id,
+          name: stop.place.name,
+          latitude: stop.place.latitude,
+          longitude: stop.place.longitude,
+          category: stop.place.category,
+          order: stop.order,
+          dayNumber: stop.dayNumber,
+        })),
+      );
+    },
+    [fitPlanWaypoints],
   );
 
   const handleVerifyVisit = useCallback(async () => {
@@ -713,19 +753,49 @@ export default function MapScreen(): React.JSX.Element {
     if (!stop || tripId == null) {
       return;
     }
-    const coords = await getDeviceCoordinates();
-    if (!coords) {
-      return;
+
+    let latitude: number;
+    let longitude: number;
+
+    if (isTripVisitSpoofEnabled()) {
+      latitude = stop.place.latitude;
+      longitude = stop.place.longitude;
+      console.info(
+        `[trip-visit-spoof] waypoint=${stop.id} → ${latitude}, ${longitude}`,
+      );
+    } else {
+      const deviceCoords = await getDeviceCoordinates();
+      if (!deviceCoords) {
+        return;
+      }
+      latitude = deviceCoords.latitude;
+      longitude = deviceCoords.longitude;
+      setTripUserLocation(deviceCoords);
+      setUserLocationVisible(true);
     }
-    setTripUserLocation(coords);
-    setUserLocationVisible(true);
+
     pendingVisitStopRef.current = stop;
     broadcastToWeb({
       type: 'REQUEST_TRIP_VISIT',
       tripId,
       waypointId: Number(stop.id),
-      latitude: coords.latitude,
-      longitude: coords.longitude,
+      latitude,
+      longitude,
+    });
+  }, [tripStops, tripCurrentIndex, tripMeta?.tripId]);
+
+  const handleSkipWaypoint = useCallback(() => {
+    const stop = tripStops[tripCurrentIndex];
+    const tripId = tripMeta?.tripId;
+    if (!stop || tripId == null) {
+      return;
+    }
+    // 건너뛰기는 방문 완료 모달을 띄우지 않음
+    pendingVisitStopRef.current = null;
+    broadcastToWeb({
+      type: 'REQUEST_TRIP_SKIP',
+      tripId,
+      waypointId: Number(stop.id),
     });
   }, [tripStops, tripCurrentIndex, tripMeta?.tripId]);
 
@@ -974,34 +1044,21 @@ export default function MapScreen(): React.JSX.Element {
 
           {showActiveTripLive ? (
             <>
-              {/* TODO: Directions API 연동 시 실제 도로 PathOverlay로 교체 */}
-              {activeTripPaths.traveled.length >= 2 ? (
-                <NaverMapPolylineOverlay
-                  coords={activeTripPaths.traveled}
-                  width={5}
-                  color={MapTokens.blue}
-                  capType="Round"
-                  joinType="Round"
-                />
-              ) : null}
-              {activeTripPaths.remaining.length >= 2 ? (
-                <NaverMapPolylineOverlay
-                  coords={activeTripPaths.remaining}
-                  width={5}
-                  color={ACTIVE_REMAINING_PATH_COLOR}
-                  capType="Round"
-                  joinType="Round"
-                />
-              ) : null}
-              {activeTripPaths.upcoming.length >= 2 ? (
-                <NaverMapPolylineOverlay
-                  coords={activeTripPaths.upcoming}
-                  width={4}
-                  color={ACTIVE_UPCOMING_PATH_COLOR}
-                  capType="Round"
-                  joinType="Round"
-                />
-              ) : null}
+              {visibleTripDayRoutes.map((route) =>
+                route.coords.length >= 2 ? (
+                  <NaverMapPathOverlay
+                    key={`trip-route-day-${route.dayNumber}`}
+                    coords={route.coords}
+                    width={8}
+                    color={planDayColor(route.dayNumber)}
+                    outlineWidth={1}
+                    outlineColor="#FFFFFF"
+                    patternImage={PATH_ARROW_PATTERN}
+                    patternInterval={36}
+                    zIndex={route.dayNumber}
+                  />
+                ) : null,
+              )}
               {tripLocation ? (
                 <>
                   <NaverMapCircleOverlay
@@ -1021,26 +1078,44 @@ export default function MapScreen(): React.JSX.Element {
                   />
                 </>
               ) : null}
-              {tripStops.map((stop, index) => {
-                const isCurrent = stop.status === 'current';
+              {visibleTripStops.map((stop) => {
+                const selected =
+                  selectedTripStopId === stop.id || stop.status === 'current';
+                const pinSize = selected
+                  ? PLAN_DAY_PIN_SELECTED_SIZE
+                  : PLAN_DAY_PIN_SIZE;
+                const dayNumber = stop.dayNumber ?? 1;
+                const dayOrder = tripDayOrderById.get(stop.id) ?? stop.order;
                 return (
                   <NaverMapMarkerOverlay
-                    key={`trip-stop-${stop.id}`}
+                    key={`trip-${dayNumber}-${dayOrder}-${stop.id}`}
                     latitude={stop.place.latitude}
                     longitude={stop.place.longitude}
-                    image={{ symbol: activeTripStopSymbol(stop.status) }}
-                    width={isCurrent ? 32 : 28}
-                    height={isCurrent ? 40 : 36}
+                    width={pinSize}
+                    height={pinSize}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                    zIndex={selected ? 10 : dayNumber}
                     caption={{
-                      text: isCurrent
-                        ? stop.place.name
-                        : `${stop.order}. ${stop.place.name}`,
-                      textSize: isCurrent ? 12 : 11,
+                      text: stop.place.name,
+                      textSize: selected ? 12 : 11,
                       color: MapTokens.text,
                       haloColor: '#FFFFFF',
                     }}
-                    onTap={() => handleSelectTripStop(stop, index)}
-                  />
+                    onTap={() =>
+                      handleSelectTripStop(
+                        stop,
+                        tripStops.findIndex((item) => item.id === stop.id),
+                      )
+                    }
+                  >
+                    <PlanDayMapPin
+                      key={`trip-pin-${dayNumber}-${dayOrder}-${selected ? 1 : 0}`}
+                      order={dayOrder}
+                      dayNumber={dayNumber}
+                      size={PLAN_DAY_PIN_SIZE}
+                      selected={selected}
+                    />
+                  </NaverMapMarkerOverlay>
                 );
               })}
             </>
@@ -1185,14 +1260,14 @@ export default function MapScreen(): React.JSX.Element {
       <ActiveTripSheet
         visible={showActiveTripLive}
         tripTitle={tripMeta?.title ?? '진행중 여행'}
-        dayLabel={tripDayLabel || '진행중'}
         visitedCount={tripVisitedCount}
         totalStops={tripStops.length}
         stops={tripStops}
         currentIndex={tripCurrentIndex}
-        canVerifyVisit={canVerifyVisit}
         underOverlay={modeSheetOpen}
         onSelectStop={handleSelectTripStop}
+        onSelectDay={handleSelectTripDay}
+        onSkipWaypoint={handleSkipWaypoint}
         onVerifyVisit={() => {
           void handleVerifyVisit();
         }}
@@ -1206,10 +1281,7 @@ export default function MapScreen(): React.JSX.Element {
           orderLabel={`${verifiedStop.order}번째 목적지`}
           visitedCount={tripVisitedCount}
           totalStops={tripStops.length}
-          onAddPhoto={() =>
-            Alert.alert('사진 추가', '사진 추가는 곧 연결될 예정이에요.')
-          }
-          onNextDestination={handleVisitNextDestination}
+          onClose={handleVisitNextDestination}
         />
       ) : null}
 

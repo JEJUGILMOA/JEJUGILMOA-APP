@@ -51,4 +51,9 @@ export type MapTripFromWeb = {
   status: string;
   actualStartedAt?: string;
   waypoints: MapTripWaypointFromWeb[];
+  /** READY 도로 경로 (일차별). 없으면 직선 폴백 */
+  dayRoutes?: {
+    dayNumber: number;
+    path: { latitude: number; longitude: number }[];
+  }[];
 };

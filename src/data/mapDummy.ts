@@ -139,6 +139,8 @@ export const DUMMY_PLAN_LEGS_SHORT = DUMMY_PLAN_LEGS.slice(0, 2);
 export type ActiveTripStop = {
   id: string;
   order: number;
+  /** 1일차 = 1 (visitDate 기준) */
+  dayNumber: number;
   place: Place;
   status: 'visited' | 'current' | 'upcoming';
   transport: 'car' | 'walk';
@@ -163,8 +165,6 @@ export const ACTIVE_TRIP = {
   totalStops: 6,
   /** 현재 목적지(0-based). 4번째 = index 3 */
   currentStopIndex: 3,
-  /** 더미 GPS: 200m 이내라 방문 인증 가능 — 3→4번 구간(제주시→성산) 중간 */
-  canVerifyVisit: true,
   walkMinutes: 11,
   distanceMeters: 350,
   arrivalTimeLabel: '13:00',
@@ -175,6 +175,7 @@ export const ACTIVE_TRIP = {
     {
       id: 's1',
       order: 1,
+      dayNumber: 1,
       place: DUMMY_PLACES[0],
       status: 'visited' as const,
       transport: 'car' as const,
@@ -185,6 +186,7 @@ export const ACTIVE_TRIP = {
     {
       id: 's2',
       order: 2,
+      dayNumber: 1,
       place: DUMMY_PLACES[1],
       status: 'visited' as const,
       transport: 'car' as const,
@@ -195,6 +197,7 @@ export const ACTIVE_TRIP = {
     {
       id: 's3',
       order: 3,
+      dayNumber: 1,
       place: DUMMY_PLACES[3],
       status: 'visited' as const,
       transport: 'car' as const,
@@ -205,6 +208,7 @@ export const ACTIVE_TRIP = {
     {
       id: 's4',
       order: 4,
+      dayNumber: 2,
       place: DUMMY_PLACES[2],
       status: 'current' as const,
       transport: 'car' as const,
@@ -215,6 +219,7 @@ export const ACTIVE_TRIP = {
     {
       id: 's5',
       order: 5,
+      dayNumber: 2,
       place: DUMMY_PLACES[4],
       status: 'upcoming' as const,
       transport: 'car' as const,
@@ -225,6 +230,7 @@ export const ACTIVE_TRIP = {
     {
       id: 's6',
       order: 6,
+      dayNumber: 2,
       place: DUMMY_PLACES[5],
       status: 'upcoming' as const,
       transport: 'walk' as const,

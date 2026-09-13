@@ -9,3 +9,10 @@ const apiRaw =
   process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || 'https://gilmoa-dev.gyeonseo.com';
 
 export const API_BASE_URL = apiRaw.replace(/\/$/, '');
+
+/**
+ * DEV 전용 기본값: 방문 인증 시 GPS 대신 목적지 좌표를 보냄.
+ * 런타임 토글(지도 모드 시트)이 AsyncStorage에 저장된 값을 우선한다.
+ */
+export const TRIP_VISIT_SPOOF_DEFAULT =
+  process.env.EXPO_PUBLIC_TRIP_VISIT_SPOOF?.trim() === 'true';

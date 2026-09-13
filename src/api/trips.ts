@@ -25,6 +25,19 @@ export type CurrentTripDto = {
   status: string;
   actualStartedAt?: string | null;
   waypoints: TripWaypointDto[];
+  routes?: TripRouteDto[];
+};
+
+export type TripRouteDto = {
+  date: string;
+  status: 'CALCULATING' | 'READY' | 'FAILED' | 'UNSUPPORTED' | 'NOT_REQUIRED';
+  option?: string | null;
+  distance?: number | null;
+  duration?: number | null;
+  calculatedAt?: string | null;
+  /** [longitude, latitude][] */
+  path?: [number, number][] | null;
+  failureCode?: string | null;
 };
 
 export type TripEarnedBadgeDto = {
@@ -96,4 +109,19 @@ export async function completeTrip(
     method: 'POST',
     ...init,
   });
+}
+
+/** POST /api/trips/{tripId}/waypoints/{waypointId}/skip */
+export async function skipTripWaypoint(
+  tripId: number,
+  waypointId: number,
+  init?: RequestInit,
+): Promise<TripWaypointDto[]> {
+  return apiFetch<TripWaypointDto[]>(
+    `/api/trips/${tripId}/waypoints/${waypointId}/skip`,
+    {
+      method: 'POST',
+      ...init,
+    },
+  );
 }

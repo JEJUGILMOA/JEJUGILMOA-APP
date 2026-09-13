@@ -20,6 +20,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
       NSLocationAlwaysAndWhenInUseUsageDescription:
         '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
+      LSApplicationQueriesSchemes: ['nmap'],
     },
   },
   android: {

@@ -1,4 +1,5 @@
 import type WebView from 'react-native-webview';
+import { Linking } from 'react-native';
 
 import type { TravelPlanSummary } from '../api/plans';
 import type { HeaderAction } from '../constants/header';
@@ -82,10 +83,21 @@ export type WebToNativeMessage =
   | { type: 'WEB_READY' }
   | { type: 'REQUEST_LOCATION' }
   | { type: 'REQUEST_BACK_HANDLER'; enabled: boolean }
-  | { type: 'OPEN_EXTERNAL_URL'; url: string }
+  | { type: 'OPEN_EXTERNAL_URL'; url: string; fallbackUrl?: string }
   | { type: 'HAPTIC'; style?: 'light' | 'medium' | 'heavy' }
   | { type: 'CLOSE_WEBVIEW' }
-  | { type: 'NAVIGATE_TO_MAP'; payload?: { placeId?: string } }
+  | {
+      type: 'NAVIGATE_TO_MAP';
+      payload?: {
+        placeId?: string;
+        mode?: 'general' | 'plan' | 'activeTrip' | 'heatmap';
+      };
+    }
+  | {
+      type: 'NAVIGATE_TO_TAB';
+      tab: 'home' | 'map' | 'plan' | 'record' | 'my';
+      path?: string;
+    }
   | { type: 'SHARE'; payload: { url: string; title: string } }
   | {
       type: 'SET_HEADER';
@@ -216,6 +228,10 @@ export type WebToNativeMessage =
           latitude?: number;
           longitude?: number;
         }[];
+        dayRoutes?: {
+          dayNumber: number;
+          path: { latitude: number; longitude: number }[];
+        }[];
       } | null;
       error?: string;
     }
@@ -320,6 +336,11 @@ export type NativeToWebMessage =
       latitude: number;
       longitude: number;
     }
+  | {
+      type: 'REQUEST_TRIP_SKIP';
+      tripId: number;
+      waypointId: number;
+    }
   | { type: 'REQUEST_TRIP_COMPLETE'; tripId: number };
 
 export type HeaderState = {
@@ -354,6 +375,14 @@ export type BridgeHandlers = {
   }) => void;
   /** 웹 브릿지 리스너 준비 완료 — AUTH_TOKEN 재주입 타이밍 */
   onWebReady?: () => void;
+  onNavigateToMap?: (payload?: {
+    placeId?: string;
+    mode?: 'general' | 'plan' | 'activeTrip' | 'heatmap';
+  }) => void;
+  onNavigateToTab?: (payload: {
+    tab: 'home' | 'map' | 'plan' | 'record' | 'my';
+    path?: string;
+  }) => void;
   onSetPlanSummaries?: (payload: {
     plans: TravelPlanSummary[];
     error?: string;
@@ -428,6 +457,29 @@ export function handleBridgeMessage(
   switch (message.type) {
     case 'WEB_READY':
       handlers?.onWebReady?.();
+      break;
+    case 'NAVIGATE_TO_MAP':
+      handlers?.onNavigateToMap?.(message.payload);
+      break;
+    case 'NAVIGATE_TO_TAB':
+      handlers?.onNavigateToTab?.({ tab: message.tab, path: message.path });
+      break;
+    case 'OPEN_EXTERNAL_URL':
+      void (async () => {
+        try {
+          await Linking.openURL(message.url);
+          return;
+        } catch {
+          // fall through
+        }
+        if (message.fallbackUrl) {
+          try {
+            await Linking.openURL(message.fallbackUrl);
+          } catch (error) {
+            console.warn('[bridge] OPEN_EXTERNAL_URL failed', error);
+          }
+        }
+      })();
       break;
     case 'SET_HEADER':
       handlers?.onSetHeader?.({

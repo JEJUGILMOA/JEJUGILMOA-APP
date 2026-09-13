@@ -151,23 +151,62 @@ export function setTripVisitResultFromWeb(
   trip: MapTripFromWeb | null,
   error?: string | null,
 ) {
-  const merged =
-    error || !trip
-      ? tripState.trip
-      : {
-          ...trip,
-          title: trip.title || tripState.trip?.title || '',
-          status: trip.status || tripState.trip?.status || 'IN_PROGRESS',
-          actualStartedAt:
-            trip.actualStartedAt ?? tripState.trip?.actualStartedAt,
-        }
+  if (error || !trip) {
+    tripState = {
+      ...tripState,
+      visitError: error ?? null,
+      updatedAt: Date.now(),
+    }
+    emitTrip()
+    return
+  }
+
+  const previous = tripState.trip
+  const mergedWaypoints = mergeTripWaypoints(previous?.waypoints, trip.waypoints)
+
   tripState = {
     ...tripState,
-    trip: merged,
-    visitError: error ?? null,
+    trip: {
+      tripId: trip.tripId || previous?.tripId || 0,
+      title: trip.title || previous?.title || '',
+      status: trip.status || previous?.status || 'IN_PROGRESS',
+      actualStartedAt: trip.actualStartedAt ?? previous?.actualStartedAt,
+      waypoints: mergedWaypoints,
+      // 방문/스킵 응답에는 경로가 없으므로 기존 dayRoutes 유지
+      dayRoutes: trip.dayRoutes ?? previous?.dayRoutes,
+    },
+    visitError: null,
     updatedAt: Date.now(),
   }
   emitTrip()
+}
+
+/** 방문/스킵 응답이 전체 목록이 아니라 일부만 와도 기존 목록에 병합 */
+function mergeTripWaypoints(
+  previous: MapTripFromWeb['waypoints'] | undefined,
+  next: MapTripFromWeb['waypoints'],
+): MapTripFromWeb['waypoints'] {
+  if (!previous?.length) return next
+  if (!next.length) return previous
+
+  const byId = new Map(previous.map((wp) => [wp.waypointId, wp]))
+  for (const wp of next) {
+    byId.set(wp.waypointId, { ...byId.get(wp.waypointId), ...wp })
+  }
+
+  const ordered: MapTripFromWeb['waypoints'] = []
+  const seen = new Set<number>()
+  for (const wp of previous) {
+    const updated = byId.get(wp.waypointId)
+    if (!updated) continue
+    ordered.push(updated)
+    seen.add(wp.waypointId)
+  }
+  for (const wp of next) {
+    if (seen.has(wp.waypointId)) continue
+    ordered.push(wp)
+  }
+  return ordered
 }
 
 export function setTripCompleteFromWeb(

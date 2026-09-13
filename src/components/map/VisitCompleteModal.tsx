@@ -13,8 +13,7 @@ type Props = {
   orderLabel: string;
   visitedCount: number;
   totalStops: number;
-  onAddPhoto: () => void;
-  onNextDestination: () => void;
+  onClose: () => void;
 };
 
 /** MAP-03b: 방문 인증 완료 모달 */
@@ -25,15 +24,15 @@ export default function VisitCompleteModal({
   orderLabel,
   visitedCount,
   totalStops,
-  onAddPhoto,
-  onNextDestination,
+  onClose,
 }: Props): React.JSX.Element {
   const progress = totalStops > 0 ? visitedCount / totalStops : 0;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onNextDestination}>
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        {/* 카드 영역 탭이 backdrop onPress로 전파되지 않도록 흡수 */}
+        <Pressable style={styles.card} onPress={() => undefined}>
           <View style={styles.checkBubble}>
             <CheckIcon color={MapTokens.green} size={28} />
           </View>
@@ -60,17 +59,8 @@ export default function VisitCompleteModal({
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${Math.min(progress, 1) * 100}%` }]} />
           </View>
-
-          <View style={styles.actions}>
-            <Pressable style={styles.secondaryBtn} onPress={onAddPhoto}>
-              <MapText style={styles.secondaryText}>사진 추가</MapText>
-            </Pressable>
-            <Pressable style={styles.primaryBtn} onPress={onNextDestination}>
-              <MapText style={styles.primaryText}>다음 목적지</MapText>
-            </Pressable>
-          </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -89,7 +79,7 @@ const styles = StyleSheet.create({
     backgroundColor: MapTokens.surface,
     paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 18,
+    paddingBottom: 22,
     alignItems: 'center',
     gap: 12,
   },
@@ -147,29 +137,4 @@ const styles = StyleSheet.create({
     backgroundColor: MapTokens.green,
     borderRadius: 4,
   },
-  actions: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-    marginTop: 4,
-  },
-  secondaryBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: MapTokens.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryText: { fontSize: 14, fontWeight: '700', color: MapTokens.textMuted },
-  primaryBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: MapTokens.green,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 });

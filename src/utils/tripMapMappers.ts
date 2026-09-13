@@ -6,19 +6,6 @@ import type { PlaceCoordLookup } from './planMapMappers';
 
 export type TripMapCoord = { latitude: number; longitude: number };
 
-function haversineMeters(a: TripMapCoord, b: TripMapCoord): number {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const earth = 6371000;
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLng = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * earth * Math.asin(Math.sqrt(h));
-}
-
 function sortWaypoints(waypoints: TripWaypointDto[]): TripWaypointDto[] {
   return [...waypoints].sort((a, b) => {
     const dateCmp = a.visitDate.localeCompare(b.visitDate);
@@ -62,31 +49,42 @@ export function mapTripWaypointsToStops(
   lookup: Map<string, PlaceCoordLookup> = new Map(),
 ): ActiveTripStop[] {
   const sorted = sortWaypoints(waypoints);
-  const currentIdx = sorted.findIndex((wp) => !wp.visited && !wp.skipped);
+  const uniqueDates = [
+    ...new Set(sorted.map((wp) => wp.visitDate).filter(Boolean)),
+  ].sort();
 
-  return sorted.flatMap((wp, index) => {
+  // 좌표 없는 경유지는 지도/시트에서 빠지므로, status·current 도 이 목록 기준으로 잡는다
+  const withPlaces = sorted.flatMap((wp) => {
     const place = waypointToPlace(wp, lookup);
     if (!place) return [];
+    return [{ wp, place }];
+  });
 
+  const currentIdx = withPlaces.findIndex(
+    ({ wp }) => !wp.visited && !wp.skipped,
+  );
+
+  return withPlaces.map(({ wp, place }, index) => {
     let status: ActiveTripStop['status'] = 'upcoming';
     if (wp.visited || wp.skipped) {
       status = 'visited';
-    } else if (currentIdx < 0 ? false : index === currentIdx) {
+    } else if (index === currentIdx) {
       status = 'current';
     }
 
-    return [
-      {
-        id: String(wp.waypointId),
-        order: index + 1,
-        place,
-        status,
-        transport: 'car' as const,
-        travelMinutes: 0,
-        distanceMeters: 0,
-        scheduledTime: wp.visitDate,
-      },
-    ];
+    const dayNumber = Math.max(1, uniqueDates.indexOf(wp.visitDate) + 1);
+
+    return {
+      id: String(wp.waypointId),
+      order: index + 1,
+      dayNumber,
+      place,
+      status,
+      transport: 'car' as const,
+      travelMinutes: 0,
+      distanceMeters: 0,
+      scheduledTime: wp.visitDate,
+    };
   });
 }
 
@@ -118,21 +116,6 @@ export function formatTripDayLabel(
   ].sort();
   const dayNumber = Math.max(1, uniqueDates.indexOf(date) + 1);
   return `${dayNumber}일차`;
-}
-
-/** 서버 방문 반경(100m)과 맞춘 클라이언트 힌트 */
-export function canVerifyAtLocation(
-  user: TripMapCoord | null,
-  stop: ActiveTripStop | null,
-  radiusMeters = 100,
-): boolean {
-  if (!user || !stop) return false;
-  return (
-    haversineMeters(user, {
-      latitude: stop.place.latitude,
-      longitude: stop.place.longitude,
-    }) <= radiusMeters
-  );
 }
 
 export function formatVerifiedAt(iso?: string | null): string {
