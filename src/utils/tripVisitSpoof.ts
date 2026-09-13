@@ -10,34 +10,33 @@ function notify(enabled: boolean) {
   listeners.forEach((listener) => listener(enabled));
 }
 
-/** 프로덕션에서는 항상 false. DEV는 캐시 → env 기본값 순 */
+/**
+ * 방문 인증 시뮬레이션 ON 여부.
+ * 설정 > 위치 섹션 7회 탭으로 토글. AsyncStorage에 유지.
+ */
 export function isTripVisitSpoofEnabled(): boolean {
-  if (!__DEV__) return false;
   if (cached != null) return cached;
-  return TRIP_VISIT_SPOOF_DEFAULT;
+  // 미초기화 시 DEV만 env 기본값, 그 외 false
+  if (__DEV__) return TRIP_VISIT_SPOOF_DEFAULT;
+  return false;
 }
 
 export async function initTripVisitSpoof(): Promise<boolean> {
-  if (!__DEV__) {
-    cached = false;
-    return false;
-  }
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (raw === 'true' || raw === 'false') {
       cached = raw === 'true';
     } else {
-      cached = TRIP_VISIT_SPOOF_DEFAULT;
+      cached = __DEV__ ? TRIP_VISIT_SPOOF_DEFAULT : false;
     }
   } catch {
-    cached = TRIP_VISIT_SPOOF_DEFAULT;
+    cached = __DEV__ ? TRIP_VISIT_SPOOF_DEFAULT : false;
   }
   notify(cached);
   return cached;
 }
 
 export async function setTripVisitSpoof(enabled: boolean): Promise<void> {
-  if (!__DEV__) return;
   cached = enabled;
   try {
     await AsyncStorage.setItem(STORAGE_KEY, enabled ? 'true' : 'false');
@@ -45,6 +44,13 @@ export async function setTripVisitSpoof(enabled: boolean): Promise<void> {
     // 저장 실패해도 런타임 값은 유지
   }
   notify(enabled);
+}
+
+export async function toggleTripVisitSpoof(): Promise<boolean> {
+  await initTripVisitSpoof();
+  const next = !isTripVisitSpoofEnabled();
+  await setTripVisitSpoof(next);
+  return next;
 }
 
 export function subscribeTripVisitSpoof(listener: (enabled: boolean) => void): () => void {

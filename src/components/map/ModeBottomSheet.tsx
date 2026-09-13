@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import MapText from './MapText';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -8,12 +8,6 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 
 import { MAP_MODE_OPTIONS, MapTokens, type MapMode } from '../../constants/map';
-import {
-  initTripVisitSpoof,
-  isTripVisitSpoofEnabled,
-  setTripVisitSpoof,
-  subscribeTripVisitSpoof,
-} from '../../utils/tripVisitSpoof';
 import { ModeOptionIcon } from './MapIcons';
 
 type Props = {
@@ -30,15 +24,7 @@ export default function ModeBottomSheet({
   onClose,
 }: Props): React.JSX.Element | null {
   const sheetRef = useRef<BottomSheet>(null);
-  const showDevTools = __DEV__;
-  const snapPoints = useMemo(() => [showDevTools ? '58%' : '46%'], [showDevTools]);
-  const [tripVisitSpoof, setTripVisitSpoofState] = useState(isTripVisitSpoofEnabled);
-
-  useEffect(() => {
-    if (!showDevTools) return;
-    void initTripVisitSpoof().then(setTripVisitSpoofState);
-    return subscribeTripVisitSpoof(setTripVisitSpoofState);
-  }, [showDevTools]);
+  const snapPoints = useMemo(() => ['46%'], []);
 
   useEffect(() => {
     if (visible) {
@@ -70,10 +56,6 @@ export default function ModeBottomSheet({
     ),
     [],
   );
-
-  const handleSpoofToggle = useCallback((enabled: boolean) => {
-    void setTripVisitSpoof(enabled);
-  }, []);
 
   if (!visible) {
     return null;
@@ -120,26 +102,6 @@ export default function ModeBottomSheet({
             </Pressable>
           );
         })}
-
-        {showDevTools ? (
-          <View style={styles.devSection}>
-            <MapText style={styles.devTitle}>개발자 옵션</MapText>
-            <View style={styles.devRow}>
-              <View style={styles.texts}>
-                <MapText style={styles.rowTitle}>방문 인증 좌표 스푸핑</MapText>
-                <MapText style={styles.rowDesc}>
-                  ON이면 GPS 대신 목적지 좌표로 인증 요청
-                </MapText>
-              </View>
-              <Switch
-                value={tripVisitSpoof}
-                onValueChange={handleSpoofToggle}
-                trackColor={{ false: MapTokens.border, true: MapTokens.greenSoft }}
-                thumbColor={tripVisitSpoof ? MapTokens.green : '#F3F4F6'}
-              />
-            </View>
-          </View>
-        ) : null}
       </BottomSheetView>
     </BottomSheet>
   );
@@ -212,25 +174,5 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: MapTokens.textMuted,
-  },
-  devSection: {
-    marginTop: 10,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: MapTokens.border,
-  },
-  devTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: MapTokens.textMuted,
-    marginBottom: 8,
-    paddingHorizontal: 10,
-  },
-  devRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
   },
 });

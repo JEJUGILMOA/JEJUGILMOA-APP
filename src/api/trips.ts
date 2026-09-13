@@ -87,13 +87,19 @@ export async function startTrip(
   });
 }
 
-/** POST /api/trips/{tripId}/visits — GPS 방문 인증 후 waypoints */
+export type TripVisitResultDto = {
+  waypoints: TripWaypointDto[];
+  autoCompleted?: boolean;
+  earnedBadges?: TripEarnedBadgeDto[];
+};
+
+/** POST /api/trips/{tripId}/visits — GPS 방문 인증 후 waypoints + earnedBadges */
 export async function checkTripVisit(
   tripId: number,
   body: VisitCheckBody,
   init?: RequestInit,
-): Promise<TripWaypointDto[]> {
-  return apiFetch<TripWaypointDto[]>(`/api/trips/${tripId}/visits`, {
+): Promise<TripVisitResultDto> {
+  return apiFetch<TripVisitResultDto>(`/api/trips/${tripId}/visits`, {
     method: 'POST',
     body: JSON.stringify(body),
     ...init,

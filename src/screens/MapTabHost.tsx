@@ -46,7 +46,7 @@ export default function MapTabHost(): React.JSX.Element {
     unregisterRef.current = null;
     webviewRef.current = instance;
     if (instance) {
-      unregisterRef.current = registerBridgeWebView(instance);
+      unregisterRef.current = registerBridgeWebView(instance, 'map');
     }
   }, []);
 
@@ -86,12 +86,19 @@ export default function MapTabHost(): React.JSX.Element {
           setTripVisitResultFromWeb(null, message.error);
           return;
         }
-        setTripVisitResultFromWeb({
-          tripId: message.tripId,
-          title: '',
-          status: 'IN_PROGRESS',
-          waypoints: message.waypoints,
-        });
+        setTripVisitResultFromWeb(
+          {
+            tripId: message.tripId,
+            title: '',
+            status: message.autoCompleted ? 'COMPLETED' : 'IN_PROGRESS',
+            waypoints: message.waypoints,
+          },
+          null,
+          {
+            earnedBadges: message.earnedBadges ?? [],
+            autoCompleted: message.autoCompleted === true,
+          },
+        );
       },
       onMapTripCompleteResult: (message) => {
         if (message.error) {
@@ -101,6 +108,11 @@ export default function MapTabHost(): React.JSX.Element {
         setTripCompleteFromWeb({
           tripId: message.tripId,
           title: message.title,
+          durationDays: message.durationDays,
+          placeCount: message.placeCount,
+          totalDistanceKm: message.totalDistanceKm,
+          startDate: message.startDate,
+          endDate: message.endDate,
           earnedBadges: message.earnedBadges ?? [],
         });
       },

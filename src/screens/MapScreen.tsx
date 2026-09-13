@@ -15,6 +15,7 @@ import { type TravelPlanSummary } from '../api/plans';
 import type { CurrentTripDto } from '../api/trips';
 import {
   clearTripCompleteResult,
+  clearTripStoreError,
   clearTripVisitError,
   markPlanDetailLoading,
   markTripLoading,
@@ -31,6 +32,9 @@ import ActiveTripEmptySheet from '../components/map/ActiveTripEmptySheet';
 import ActiveTripSheet from '../components/map/ActiveTripSheet';
 import ActiveTripStatusBanner from '../components/map/ActiveTripStatusBanner';
 import BadgeUnlockModal from '../components/map/BadgeUnlockModal';
+import TripCompleteModal, {
+  type TripCompleteSummary,
+} from '../components/map/TripCompleteModal';
 import CategoryChips from '../components/map/CategoryChips';
 import CategoryMapPin, {
   CATEGORY_PIN_SELECTED_SIZE,
@@ -71,6 +75,10 @@ import {
 } from '../data/mapDummy';
 import { setPendingWebPath } from '../pendingWebPath';
 import { takePendingMapMode } from '../pendingMapMode';
+import {
+  getMapTabRefreshSeq,
+  subscribeMapTabRefresh,
+} from '../pendingMapRefresh';
 import type { HeatZone, Place, PlanTravelLeg, PlanWaypoint } from '../types/map';
 import {
   dayPathsFromWaypoints,
@@ -139,6 +147,8 @@ export default function MapScreen(): React.JSX.Element {
   }, []);
 
   const [mode, setMode] = useState<MapMode>('general');
+  /** 여행 시작 등으로 같은 모드에서도 진행중 여행 재조회 */
+  const [mapRefreshKey, setMapRefreshKey] = useState(0);
   const [category, setCategory] = useState<PlaceCategory>('all');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [modeSheetOpen, setModeSheetOpen] = useState(false);
@@ -154,8 +164,18 @@ export default function MapScreen(): React.JSX.Element {
         setModeSheetOpen(false);
         setSearchOpen(false);
       }
+      const refresh = getMapTabRefreshSeq();
+      if (refresh > 0) {
+        setMapRefreshKey(refresh);
+      }
     }, []),
   );
+
+  useEffect(() => {
+    return subscribeMapTabRefresh((next) => {
+      setMapRefreshKey(next);
+    });
+  }, []);
   const [planView, setPlanView] = useState<'list' | 'detail'>('list');
   const [planSummaries, setPlanSummaries] = useState<TravelPlanSummary[]>([]);
   const [planListLoading, setPlanListLoading] = useState(false);
@@ -189,11 +209,58 @@ export default function MapScreen(): React.JSX.Element {
     { dayNumber: number; coords: { latitude: number; longitude: number }[] }[]
   >([]);
   const pendingVisitStopRef = useRef<ActiveTripStop | null>(null);
+  const pendingVisitBadgesRef = useRef<
+    { badgeId: number; name: string; description?: string; imageUrl?: string }[]
+  >([]);
+  const pendingVisitAutoCompletedRef = useRef(false);
+  /** 방문 응답 waypoints 기준 — 모달 닫을 때 React tripStops 지연과 무관하게 완료 판정 */
+  const pendingVisitTripDoneRef = useRef(false);
+  const pendingExpectingCompleteRef = useRef(false);
+  const pendingCompleteBadgesRef = useRef<
+    { badgeId: number; name: string; description?: string; imageUrl?: string }[]
+  >([]);
+  const tripMetaRef = useRef(tripMeta);
+  tripMetaRef.current = tripMeta;
+  const tripStopsRef = useRef(tripStops);
+  tripStopsRef.current = tripStops;
   const [visitModalOpen, setVisitModalOpen] = useState(false);
   const [badgeModalOpen, setBadgeModalOpen] = useState(false);
+  const [tripCompleteModalOpen, setTripCompleteModalOpen] = useState(false);
+  const [tripCompleteSummary, setTripCompleteSummary] =
+    useState<TripCompleteSummary | null>(null);
   const [verifiedStop, setVerifiedStop] = useState<ActiveTripStop | null>(null);
   const [verifiedAtLabel, setVerifiedAtLabel] = useState('');
   const [unlockedBadge, setUnlockedBadge] = useState<ActiveTripBadge | null>(null);
+
+  const openBadgeUnlock = useCallback(
+    (
+      badges: { badgeId: number; name: string; description?: string; imageUrl?: string }[],
+    ) => {
+      if (badges.length === 0) return;
+      const first = badges[0]!;
+      setUnlockedBadge({
+        id: String(first.badgeId),
+        title: first.name,
+        description: first.description ?? '',
+        collected: badges.length,
+        total: badges.length,
+      });
+      setBadgeModalOpen(true);
+    },
+    [],
+  );
+
+  const openTripComplete = useCallback(
+    (
+      summary: TripCompleteSummary,
+      badges: { badgeId: number; name: string; description?: string; imageUrl?: string }[] = [],
+    ) => {
+      pendingCompleteBadgesRef.current = badges;
+      setTripCompleteSummary(summary);
+      setTripCompleteModalOpen(true);
+    },
+    [],
+  );
 
   const [viewBounds, setViewBounds] = useState<MapBounds>(JEJU_DEFAULT_BOUNDS);
   const [searchBounds, setSearchBounds] = useState<MapBounds | null>(null);
@@ -656,6 +723,17 @@ export default function MapScreen(): React.JSX.Element {
     setTripApiDayRoutes(fromApi);
   }, []);
 
+  const handleTripCompleteClose = useCallback(() => {
+    setTripCompleteModalOpen(false);
+    setTripCompleteSummary(null);
+    const badges = pendingCompleteBadgesRef.current;
+    pendingCompleteBadgesRef.current = [];
+    if (badges.length > 0) {
+      openBadgeUnlock(badges);
+    }
+    applyTripFromWeb(null);
+  }, [openBadgeUnlock, applyTripFromWeb]);
+
   useEffect(() => {
     if (mode !== 'activeTrip') {
       setTripLoading(false);
@@ -678,24 +756,40 @@ export default function MapScreen(): React.JSX.Element {
         clearTripVisitError();
       }
       if (next.completeResult) {
-        const badges = next.completeResult.earnedBadges ?? [];
-        if (badges.length > 0) {
-          const first = badges[0]!;
-          setUnlockedBadge({
-            id: String(first.badgeId),
-            title: first.name,
-            description: first.description ?? '',
-            collected: badges.length,
-            total: badges.length,
-          });
-          setBadgeModalOpen(true);
-        }
+        const result = next.completeResult;
+        pendingExpectingCompleteRef.current = false;
+        openTripComplete(
+          {
+            title: result.title ?? tripMetaRef.current?.title ?? '여행',
+            durationDays: result.durationDays,
+            placeCount: result.placeCount,
+            totalDistanceKm: result.totalDistanceKm,
+            startDate: result.startDate,
+            endDate: result.endDate,
+          },
+          result.earnedBadges?.length
+            ? result.earnedBadges
+            : pendingCompleteBadgesRef.current,
+        );
         clearTripCompleteResult();
-        applyTripFromWeb(null);
         return;
       }
       if (next.error) {
-        console.warn('[map] current trip failed', next.error);
+        console.warn('[map] current trip / complete failed', next.error);
+        if (pendingExpectingCompleteRef.current) {
+          pendingExpectingCompleteRef.current = false;
+          const message = next.error;
+          clearTripStoreError();
+          Alert.alert('여행 완료 실패', message);
+          openTripComplete(
+            {
+              title: tripMetaRef.current?.title ?? '여행',
+              placeCount: tripStopsRef.current.length,
+            },
+            pendingCompleteBadgesRef.current,
+          );
+          return;
+        }
         applyTripFromWeb(null);
         return;
       }
@@ -707,9 +801,15 @@ export default function MapScreen(): React.JSX.Element {
             (wp) => String(wp.waypointId) === pending.id,
           );
           if (updated?.visited) {
+            const stopsAfterVisit = mapTripWaypointsToStops(next.trip.waypoints ?? []);
+            const progressAfterVisit = deriveTripProgress(stopsAfterVisit);
             setVerifiedStop(pending);
             setVerifiedAtLabel(formatVerifiedAt(updated.visitedAt));
             setVisitModalOpen(true);
+            pendingVisitBadgesRef.current = next.visitEarnedBadges ?? [];
+            pendingVisitAutoCompletedRef.current = next.visitAutoCompleted;
+            pendingVisitTripDoneRef.current =
+              next.visitAutoCompleted || progressAfterVisit.allVisited;
             pendingVisitStopRef.current = null;
           }
         }
@@ -717,7 +817,14 @@ export default function MapScreen(): React.JSX.Element {
         applyTripFromWeb(null);
       }
     });
-  }, [mode, isAuthenticated, applyTripFromWeb]);
+  }, [mode, isAuthenticated, applyTripFromWeb, openTripComplete, mapRefreshKey]);
+
+  /** 여행 시작 후 계획 모드 목록도 최신화 */
+  useEffect(() => {
+    if (mapRefreshKey === 0 || mode !== 'plan') return;
+    markPlanListLoading();
+    broadcastToWeb({ type: 'REQUEST_PLAN_SUMMARIES' });
+  }, [mapRefreshKey, mode]);
 
   const handleSelectTripStop = useCallback(
     (stop: ActiveTripStop, _index: number) => {
@@ -801,15 +908,57 @@ export default function MapScreen(): React.JSX.Element {
 
   const handleVisitNextDestination = useCallback(() => {
     setVisitModalOpen(false);
-    const progress = deriveTripProgress(tripStops);
-    if (!progress.allVisited || tripMeta?.tripId == null) {
+
+    const badges = pendingVisitBadgesRef.current;
+    pendingVisitBadgesRef.current = [];
+    const autoCompleted = pendingVisitAutoCompletedRef.current;
+    pendingVisitAutoCompletedRef.current = false;
+    const tripDone = pendingVisitTripDoneRef.current;
+    pendingVisitTripDoneRef.current = false;
+
+    // 마지막 경유지(자동완료 또는 전 지점 방문) — 뱃지보다 여행 완료를 우선
+    if (autoCompleted || tripDone) {
+      if (autoCompleted) {
+        openTripComplete(
+          {
+            title: tripMeta?.title ?? '여행',
+            placeCount: tripStops.length,
+          },
+          badges,
+        );
+        return;
+      }
+
+      if (tripMeta?.tripId != null) {
+        pendingExpectingCompleteRef.current = true;
+        pendingCompleteBadgesRef.current = badges;
+        broadcastToWeb({
+          type: 'REQUEST_TRIP_COMPLETE',
+          tripId: tripMeta.tripId,
+        });
+        return;
+      }
+
+      openTripComplete(
+        {
+          title: tripMeta?.title ?? '여행',
+          placeCount: tripStops.length,
+        },
+        badges,
+      );
       return;
     }
-    broadcastToWeb({
-      type: 'REQUEST_TRIP_COMPLETE',
-      tripId: tripMeta.tripId,
-    });
-  }, [tripStops, tripMeta?.tripId]);
+
+    if (badges.length > 0) {
+      openBadgeUnlock(badges);
+    }
+  }, [
+    tripStops,
+    tripMeta?.tripId,
+    tripMeta?.title,
+    openBadgeUnlock,
+    openTripComplete,
+  ]);
 
   const handleMyLocation = useCallback(async () => {
     const granted = await ensureMapLocationPermission();
@@ -1285,16 +1434,21 @@ export default function MapScreen(): React.JSX.Element {
         />
       ) : null}
 
+      {tripCompleteSummary ? (
+        <TripCompleteModal
+          visible={tripCompleteModalOpen}
+          summary={tripCompleteSummary}
+          onClose={handleTripCompleteClose}
+        />
+      ) : null}
+
       {unlockedBadge ? (
         <BadgeUnlockModal
           visible={badgeModalOpen}
           badge={unlockedBadge}
           recentLabels={[]}
           extraCount={0}
-          onShare={() => {
-            void Share.share({ message: `배지 획득: ${unlockedBadge.title}` });
-          }}
-          onConfirm={() => setBadgeModalOpen(false)}
+          onClose={() => setBadgeModalOpen(false)}
         />
       ) : null}
 

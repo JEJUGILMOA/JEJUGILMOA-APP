@@ -3,6 +3,9 @@ import { Linking } from 'react-native';
 
 import type { TravelPlanSummary } from '../api/plans';
 import type { HeaderAction } from '../constants/header';
+import { requestMapTabRefresh } from '../pendingMapRefresh';
+import { setPendingWebPath } from '../pendingWebPath';
+import { sendToTabWeb } from './webviewRegistry';
 
 export type WebDialogAction = {
   id: string;
@@ -253,12 +256,24 @@ export type WebToNativeMessage =
         latitude?: number;
         longitude?: number;
       }[];
+      autoCompleted?: boolean;
+      earnedBadges?: {
+        badgeId: number;
+        name: string;
+        description?: string;
+        imageUrl?: string;
+      }[];
       error?: string;
     }
   | {
       type: 'MAP_TRIP_COMPLETE_RESULT';
       tripId: number;
       title?: string;
+      durationDays?: number;
+      placeCount?: number;
+      totalDistanceKm?: number;
+      startDate?: string;
+      endDate?: string;
       earnedBadges?: {
         badgeId: number;
         name: string;
@@ -268,7 +283,11 @@ export type WebToNativeMessage =
       error?: string;
     }
   | { type: 'MAP_ERROR'; code?: string; message: string }
-  | { type: 'LOGOUT' };
+  | { type: 'LOGOUT' }
+  /** 설정 > 위치 7회 탭 — 방문 인증 시뮬레이션 토글 */
+  | { type: 'TOGGLE_TRIP_VISIT_SPOOF' }
+  /** 계획 저장·여행 시작 후 해당 탭 데이터/화면 갱신 */
+  | { type: 'REFRESH_TABS'; tabs: Array<'plan' | 'map' | 'home' | 'record' | 'my'> };
 
 export type NativeToWebMessage =
   | { type: 'NATIVE_READY'; platform: 'ios' | 'android' }
@@ -306,6 +325,8 @@ export type NativeToWebMessage =
   | { type: 'NATIVE_LAYOUT'; screenHeight: number }
   /** 같은 탭을 다시 눌렀을 때 웹을 탭 루트 경로로 되돌림 */
   | { type: 'TAB_POP_TO_ROOT'; path: string }
+  /** 웹 React Query 캐시 무효화 (탭 WebView별) */
+  | { type: 'INVALIDATE_DATA'; scopes: Array<'plans' | 'currentTrip'> }
   | {
       type: 'APPLE_CREDENTIAL';
       identityToken: string;
@@ -401,6 +422,7 @@ export type BridgeHandlers = {
   ) => void;
   onMapError?: (message: string) => void;
   onLogout?: () => void;
+  onToggleTripVisitSpoof?: () => void;
 };
 
 const HIDDEN_PLAN_MAP: PlanMapState = {
@@ -550,6 +572,21 @@ export function handleBridgeMessage(
     case 'LOGOUT':
       handlers?.onLogout?.();
       break;
+    case 'TOGGLE_TRIP_VISIT_SPOOF':
+      handlers?.onToggleTripVisitSpoof?.();
+      break;
+    case 'REFRESH_TABS': {
+      const tabs = Array.isArray(message.tabs) ? message.tabs : [];
+      if (tabs.includes('plan')) {
+        setPendingWebPath('plan', '/plan');
+        sendToTabWeb('plan', { type: 'TAB_POP_TO_ROOT', path: '/plan' });
+        sendToTabWeb('plan', { type: 'INVALIDATE_DATA', scopes: ['plans', 'currentTrip'] });
+      }
+      if (tabs.includes('map')) {
+        requestMapTabRefresh();
+      }
+      break;
+    }
     default:
       break;
   }

@@ -1,8 +1,20 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { WebDialogAction } from '../bridge/webviewBridge';
 import { TabBarTokens } from '../constants/tabs';
+
+/** FE Button danger / primary 토큰과 맞춤 */
+const ButtonColors = {
+  danger: '#FF4C4C',
+  dangerPressed: '#973131',
+  primary: TabBarTokens.active,
+  primaryPressed: '#17783C',
+  ghost: '#F3F4F8',
+  ghostPressed: '#EAEAE7',
+  labelOnColor: '#FFFFFF',
+  labelGhost: '#1A1A1A',
+} as const;
 
 export type WebDialogState = {
   visible: boolean;
@@ -36,40 +48,65 @@ export default function WebDialog({ dialog, onAction, onDismiss }: Props): React
     >
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel="닫기" />
-        <View style={styles.panel}>
-          <Text style={styles.title}>{dialog.title}</Text>
-          {dialog.description ? (
-            <Text style={styles.description}>{dialog.description}</Text>
-          ) : null}
+        {/* 패널 탭이 딤 onDismiss로 새지 않도록 터치 흡수 */}
+        <Pressable style={styles.panel} onPress={() => undefined}>
+          <View style={styles.body}>
+            <Text style={styles.title}>{dialog.title}</Text>
+            {dialog.description ? (
+              <Text style={styles.description}>{dialog.description}</Text>
+            ) : null}
+          </View>
           <View style={styles.actions}>
             {dialog.actions.map((action) => (
               <Pressable
                 key={action.id}
-                style={[styles.button, buttonStyle(action.variant)]}
+                style={({ pressed }) => [
+                  styles.button,
+                  buttonStyle(action.variant, pressed),
+                ]}
                 onPress={() => onAction(action.id)}
               >
-                <Text style={[styles.buttonLabel, buttonLabelStyle(action.variant)]}>
-                  {action.label}
-                </Text>
+                {({ pressed }) => (
+                  <Text
+                    style={[
+                      styles.buttonLabel,
+                      buttonLabelStyle(action.variant),
+                      pressed && isGhostVariant(action.variant)
+                        ? styles.buttonLabelGhostPressed
+                        : null,
+                    ]}
+                  >
+                    {action.label}
+                  </Text>
+                )}
               </Pressable>
             ))}
           </View>
-        </View>
+        </Pressable>
       </View>
     </Modal>
   );
 }
 
-function buttonStyle(variant: WebDialogAction['variant']) {
-  if (variant === 'ghost' || variant === 'outline' || variant === 'secondary') {
-    return styles.buttonGhost;
+function isGhostVariant(variant: WebDialogAction['variant']) {
+  return variant === 'ghost' || variant === 'outline' || variant === 'secondary';
+}
+
+function buttonStyle(
+  variant: WebDialogAction['variant'],
+  pressed: boolean,
+): StyleProp<ViewStyle> {
+  if (isGhostVariant(variant)) {
+    return pressed ? styles.buttonGhostPressed : styles.buttonGhost;
   }
-  if (variant === 'danger') return styles.buttonDanger;
-  return styles.buttonPrimary;
+  if (variant === 'danger') {
+    return pressed ? styles.buttonDangerPressed : styles.buttonDanger;
+  }
+  return pressed ? styles.buttonPrimaryPressed : styles.buttonPrimary;
 }
 
 function buttonLabelStyle(variant: WebDialogAction['variant']) {
-  if (variant === 'ghost' || variant === 'outline' || variant === 'secondary') {
+  if (isGhostVariant(variant)) {
     return styles.buttonLabelGhost;
   }
   return styles.buttonLabelOnColor;
@@ -90,26 +127,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 16,
-    gap: 24,
     zIndex: 1,
     elevation: 8,
+  },
+  body: {
+    gap: 8,
+    paddingHorizontal: 8,
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1A1A1A',
     letterSpacing: -0.3,
-    paddingHorizontal: 8,
   },
   description: {
     fontSize: 14,
     color: '#6B7280',
     lineHeight: 20,
-    paddingHorizontal: 8,
   },
   actions: {
     flexDirection: 'row',
     gap: 8,
+    paddingTop: 20,
   },
   button: {
     flex: 1,
@@ -119,22 +158,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonPrimary: {
-    backgroundColor: TabBarTokens.active,
+    backgroundColor: ButtonColors.primary,
+  },
+  buttonPrimaryPressed: {
+    backgroundColor: ButtonColors.primaryPressed,
   },
   buttonDanger: {
-    backgroundColor: '#E85D4C',
+    backgroundColor: ButtonColors.danger,
+  },
+  buttonDangerPressed: {
+    backgroundColor: ButtonColors.dangerPressed,
   },
   buttonGhost: {
-    backgroundColor: '#F3F4F8',
+    backgroundColor: ButtonColors.ghost,
+  },
+  buttonGhostPressed: {
+    backgroundColor: ButtonColors.ghostPressed,
   },
   buttonLabel: {
     fontSize: 16,
     fontWeight: '600',
   },
   buttonLabelOnColor: {
-    color: '#FFFFFF',
+    color: ButtonColors.labelOnColor,
   },
   buttonLabelGhost: {
-    color: '#1A1A1A',
+    color: ButtonColors.labelGhost,
+  },
+  buttonLabelGhostPressed: {
+    color: '#45484F',
   },
 });

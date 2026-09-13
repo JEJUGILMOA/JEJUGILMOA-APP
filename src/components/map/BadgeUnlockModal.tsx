@@ -24,8 +24,7 @@ type Props = {
   badge: ActiveTripBadge;
   recentLabels: readonly string[];
   extraCount: number;
-  onShare: () => void;
-  onConfirm: () => void;
+  onClose: () => void;
 };
 
 /** MAP-03c: 배지 획득 모달 + 축하 컨페티 */
@@ -34,8 +33,7 @@ export default function BadgeUnlockModal({
   badge,
   recentLabels,
   extraCount,
-  onShare,
-  onConfirm,
+  onClose,
 }: Props): React.JSX.Element {
   const { confettiRef, fire, reset } = useConfetti();
   const firedForSession = useRef(false);
@@ -74,15 +72,15 @@ export default function BadgeUnlockModal({
   }, [visible, fire, reset]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onConfirm}>
-      <View style={styles.backdrop}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
         <ConfettiCanvas
           ref={confettiRef}
           fullScreen
           zIndex={20}
           containerStyle={styles.confettiLayer}
         />
-        <View style={styles.card}>
+        <Pressable style={styles.card} onPress={() => undefined}>
           <View style={styles.hero}>
             <MapText style={styles.heroLabel}>NEW BADGE</MapText>
             <View style={styles.medal}>
@@ -114,18 +112,9 @@ export default function BadgeUnlockModal({
                 <MapText style={styles.moreText}>+{extraCount}</MapText>
               </View>
             </View>
-
-            <View style={styles.actions}>
-              <Pressable style={styles.secondaryBtn} onPress={onShare}>
-                <MapText style={styles.secondaryText}>자랑하기</MapText>
-              </Pressable>
-              <Pressable style={styles.primaryBtn} onPress={onConfirm}>
-                <MapText style={styles.primaryText}>확인</MapText>
-              </Pressable>
-            </View>
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -239,28 +228,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   moreText: { fontSize: 12, fontWeight: '700', color: MapTokens.textMuted },
-  actions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 6,
-  },
-  secondaryBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: MapTokens.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryText: { fontSize: 14, fontWeight: '700', color: MapTokens.textMuted },
-  primaryBtn: {
-    flex: 1,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: MapTokens.green,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 });

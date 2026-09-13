@@ -15,15 +15,31 @@ export type MapPlanDetailState = {
   updatedAt: number
 }
 
+export type MapTripEarnedBadge = {
+  badgeId: number
+  name: string
+  description?: string
+  imageUrl?: string
+}
+
 export type MapTripState = {
   trip: MapTripFromWeb | null
   loading: boolean
   error: string | null
   visitError: string | null
+  /** 방문 인증으로 새로 받은 뱃지 (모달 표시 후 비움) */
+  visitEarnedBadges: MapTripEarnedBadge[] | null
+  /** 마지막 경유지 인증으로 서버에서 여행 자동 완료 */
+  visitAutoCompleted: boolean
   completeResult: {
     tripId: number
     title?: string
-    earnedBadges: { badgeId: number; name: string; description?: string; imageUrl?: string }[]
+    durationDays?: number
+    placeCount?: number
+    totalDistanceKm?: number
+    startDate?: string
+    endDate?: string
+    earnedBadges: MapTripEarnedBadge[]
   } | null
   updatedAt: number
 }
@@ -54,6 +70,8 @@ let tripState: MapTripState = {
   loading: false,
   error: null,
   visitError: null,
+  visitEarnedBadges: null,
+  visitAutoCompleted: false,
   completeResult: null,
   updatedAt: 0,
 }
@@ -128,6 +146,8 @@ export function markTripLoading() {
     loading: true,
     error: null,
     visitError: null,
+    visitEarnedBadges: null,
+    visitAutoCompleted: false,
     completeResult: null,
   }
   emitTrip()
@@ -150,11 +170,17 @@ export function setCurrentTripFromWeb(
 export function setTripVisitResultFromWeb(
   trip: MapTripFromWeb | null,
   error?: string | null,
+  extras?: {
+    earnedBadges?: MapTripEarnedBadge[]
+    autoCompleted?: boolean
+  },
 ) {
   if (error || !trip) {
     tripState = {
       ...tripState,
       visitError: error ?? null,
+      visitEarnedBadges: null,
+      visitAutoCompleted: false,
       updatedAt: Date.now(),
     }
     emitTrip()
@@ -176,6 +202,8 @@ export function setTripVisitResultFromWeb(
       dayRoutes: trip.dayRoutes ?? previous?.dayRoutes,
     },
     visitError: null,
+    visitEarnedBadges: extras?.earnedBadges?.length ? extras.earnedBadges : null,
+    visitAutoCompleted: extras?.autoCompleted === true,
     updatedAt: Date.now(),
   }
   emitTrip()
@@ -215,7 +243,7 @@ export function setTripCompleteFromWeb(
 ) {
   tripState = {
     ...tripState,
-    trip: error ? tripState.trip : null,
+    // 완료 모달이 닫힐 때까지 trip을 유지한다 (즉시 null이면 empty 시트로 깜빡이고 구독 레이스가 난다)
     completeResult: error ? null : result,
     error: error ?? null,
     updatedAt: Date.now(),
@@ -225,6 +253,12 @@ export function setTripCompleteFromWeb(
 
 export function clearTripCompleteResult() {
   tripState = { ...tripState, completeResult: null }
+  emitTrip()
+}
+
+export function clearTripStoreError() {
+  if (!tripState.error) return
+  tripState = { ...tripState, error: null }
   emitTrip()
 }
 

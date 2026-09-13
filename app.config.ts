@@ -61,7 +61,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         // JS SplashScreen(LoginColors.white)과 동일 — 전환 시 색 깜빡임 방지
         backgroundColor: '#FFFFFF',
-        image: './assets/images/splash-icon2.png',
+        image: './assets/images/appicon.png',
         imageWidth: 200,
       },
     ],

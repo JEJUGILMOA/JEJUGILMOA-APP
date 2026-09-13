@@ -128,9 +128,9 @@ export default function WebViewScreen({ path, tabName }: Props) {
     unregisterWebViewRef.current = null;
     webviewRef.current = instance;
     if (instance) {
-      unregisterWebViewRef.current = registerBridgeWebView(instance);
+      unregisterWebViewRef.current = registerBridgeWebView(instance, tabName);
     }
-  }, []);
+  }, [tabName]);
 
   useEffect(
     () => () => {
@@ -177,7 +177,11 @@ export default function WebViewScreen({ path, tabName }: Props) {
       },
       onSetModal: (message) => {
         if (!message.visible) {
-          setWebDialog((prev) => (message.id && prev.id !== message.id ? prev : HIDDEN_WEB_DIALOG));
+          // 닫을 때 title/description을 바로 비우면 fade-out 중 빈 패널이 보인다
+          setWebDialog((prev) => {
+            if (message.id && prev.id && prev.id !== message.id) return prev;
+            return { ...prev, visible: false };
+          });
           return;
         }
         setWebDialog({
@@ -319,6 +323,22 @@ export default function WebViewScreen({ path, tabName }: Props) {
         });
         signOut();
         router.replace('/login');
+      },
+      onToggleTripVisitSpoof: () => {
+        void (async () => {
+          const { toggleTripVisitSpoof } = await import('../utils/tripVisitSpoof');
+          const enabled = await toggleTripVisitSpoof();
+          setWebToast({
+            visible: true,
+            id: `trip-visit-spoof-${Date.now()}`,
+            kind: 'info',
+            message: enabled
+              ? '개발자 옵션: 방문 인증 시뮬레이션 ON'
+              : '개발자 옵션: 방문 인증 시뮬레이션 OFF',
+            duration: 2500,
+            actions: [],
+          });
+        })();
       },
     });
   }, [signIn, signOut]);
