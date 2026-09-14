@@ -463,7 +463,7 @@ function parseWebToNative(raw: string): WebToNativeMessage | null {
     if (!message || typeof message.type !== 'string') return null;
     return message;
   } catch {
-    console.warn('[bridge] JSON 파싱 실패:', raw);
+    // console.warn('[bridge] JSON 파싱 실패:', raw);
     return null;
   }
 }
@@ -498,7 +498,7 @@ export function handleBridgeMessage(
           try {
             await Linking.openURL(message.fallbackUrl);
           } catch (error) {
-            console.warn('[bridge] OPEN_EXTERNAL_URL failed', error);
+            // console.warn('[bridge] OPEN_EXTERNAL_URL failed', error);
           }
         }
       })();

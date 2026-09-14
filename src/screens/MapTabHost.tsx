@@ -117,7 +117,7 @@ export default function MapTabHost(): React.JSX.Element {
         });
       },
       onMapError: (message) => {
-        console.warn('[map-bridge]', message);
+        // console.warn('[map-bridge]', message);
       },
       onWebReady: () => {
         injectStoredWebAuthToWeb(webviewRef.current, getStoredWebAuth());

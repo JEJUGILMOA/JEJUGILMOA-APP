@@ -319,7 +319,7 @@ export default function MapScreen(): React.JSX.Element {
         });
       } catch (error) {
         if (controller.signal.aborted) return;
-        console.warn('[map] places fetch failed', error);
+        // console.warn('[map] places fetch failed', error);
       }
     })();
 
@@ -349,7 +349,7 @@ export default function MapScreen(): React.JSX.Element {
         setHeatZones(rows.map(mapHeatmapDtoToZone));
       } catch (error) {
         if (controller.signal.aborted) return;
-        console.warn('[map] heatmap fetch failed', error);
+        // console.warn('[map] heatmap fetch failed', error);
       }
     })();
 
@@ -493,7 +493,7 @@ export default function MapScreen(): React.JSX.Element {
       setPlanSummaries(next.plans);
       setPlanListLoading(next.loading);
       if (next.error) {
-        console.warn('[map] plan list from web failed', next.error);
+        // console.warn('[map] plan list from web failed', next.error);
       }
     });
   }, [mode]);
@@ -635,7 +635,7 @@ export default function MapScreen(): React.JSX.Element {
       setPlanDetailLoading(false);
       if (next.error || !next.detail || next.detail.planId !== planId) {
         if (next.error) {
-          console.warn('[map] plan detail from web failed', next.error);
+          // console.warn('[map] plan detail from web failed', next.error);
           Alert.alert(
             '계획을 불러오지 못했어요',
             '잠시 후 다시 시도해 주세요.',
@@ -752,7 +752,7 @@ export default function MapScreen(): React.JSX.Element {
       if (next.visitError) {
         Alert.alert('여행 진행 실패', next.visitError);
         // 긴 raw JSON도 Metro/Logcat에서 볼 수 있게 남긴다
-        console.warn('[map] visit/skip error detail\n', next.visitError);
+        // console.warn('[map] visit/skip error detail\n', next.visitError);
         clearTripVisitError();
       }
       if (next.completeResult) {
@@ -775,7 +775,7 @@ export default function MapScreen(): React.JSX.Element {
         return;
       }
       if (next.error) {
-        console.warn('[map] current trip / complete failed', next.error);
+        // console.warn('[map] current trip / complete failed', next.error);
         if (pendingExpectingCompleteRef.current) {
           pendingExpectingCompleteRef.current = false;
           const message = next.error;
@@ -867,9 +867,9 @@ export default function MapScreen(): React.JSX.Element {
     if (isTripVisitSpoofEnabled()) {
       latitude = stop.place.latitude;
       longitude = stop.place.longitude;
-      console.info(
-        `[trip-visit-spoof] waypoint=${stop.id} → ${latitude}, ${longitude}`,
-      );
+      // console.info(
+      //   `[trip-visit-spoof] waypoint=${stop.id} → ${latitude}, ${longitude}`,
+      // );
     } else {
       const deviceCoords = await getDeviceCoordinates();
       if (!deviceCoords) {

@@ -352,7 +352,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
   }, []);
 
   const onWebError = useCallback((event: { nativeEvent: { code?: number; description?: string } }) => {
-    console.warn('[WebView] load error', event.nativeEvent.code, event.nativeEvent.description);
+    // console.warn('[WebView] load error', event.nativeEvent.code, event.nativeEvent.description);
   }, []);
 
   /** http(s)·about 외 메인 프레임 이동은 iOS에서 "Load Failed"로 깨지기 쉬워 차단 */
@@ -366,7 +366,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
     ) {
       return true;
     }
-    console.warn('[WebView] blocked navigation', url.slice(0, 120));
+    // console.warn('[WebView] blocked navigation', url.slice(0, 120));
     return false;
   }, []);
 
@@ -556,7 +556,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
           onError={onWebError}
           onHttpError={(event) => {
             if (event.nativeEvent.statusCode >= 500) {
-              console.warn('[WebView] http error', event.nativeEvent.statusCode, event.nativeEvent.url);
+              // console.warn('[WebView] http error', event.nativeEvent.statusCode, event.nativeEvent.url);
             }
           }}
           onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}

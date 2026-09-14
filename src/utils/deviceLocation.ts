@@ -35,7 +35,7 @@ export async function getDeviceCoordinates(): Promise<DeviceCoords | null> {
       longitude: position.coords.longitude,
     };
   } catch (error) {
-    console.warn('[location] getCurrentPosition failed', error);
+    // console.warn('[location] getCurrentPosition failed', error);
     Alert.alert('위치를 가져오지 못했어요', '잠시 후 다시 시도해 주세요.');
     return null;
   }
