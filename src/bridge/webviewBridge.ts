@@ -1,5 +1,6 @@
 import type WebView from 'react-native-webview';
-import { Linking } from 'react-native';
+import { Alert, Linking } from 'react-native';
+import { router } from 'expo-router';
 
 import type { TravelPlanSummary } from '../api/plans';
 import type { HeaderAction } from '../constants/header';
@@ -162,6 +163,11 @@ export type WebToNativeMessage =
       url: string;
       title?: string;
       provider?: 'kakao' | 'google' | 'naver';
+    }
+  /** 탭과 분리된 네이티브 로그인 스택 화면 */
+  | {
+      type: 'OPEN_NATIVE_LOGIN';
+      returnTo?: string;
     }
   /** 웹 로그아웃 성공 → 네이티브가 tabs로 전환 */
   | {
@@ -488,19 +494,32 @@ export function handleBridgeMessage(
       break;
     case 'OPEN_EXTERNAL_URL':
       void (async () => {
-        try {
-          await Linking.openURL(message.url);
-          return;
-        } catch {
-          // fall through
-        }
-        if (message.fallbackUrl) {
+        const primaryUrl = message.url;
+        const fallbackUrl = message.fallbackUrl;
+
+        const openExternal = async () => {
           try {
-            await Linking.openURL(message.fallbackUrl);
-          } catch (error) {
-            // console.warn('[bridge] OPEN_EXTERNAL_URL failed', error);
+            const canOpenPrimary = await Linking.canOpenURL(primaryUrl);
+            if (canOpenPrimary) {
+              await Linking.openURL(primaryUrl);
+              return;
+            }
+          } catch {
+            // 앱 열기 실패 시 웹으로
           }
-        }
+          if (!fallbackUrl) return;
+          try {
+            await Linking.openURL(fallbackUrl);
+          } catch {
+            // console.warn('[bridge] OPEN_EXTERNAL_URL failed');
+          }
+        };
+
+        // 취소해도 웹이 열리지 않도록, 앱 확인을 우리가 먼저 띄운다
+        Alert.alert('지도에서 볼까요?', '네이버 지도로 이 장소를 엽니다.', [
+          { text: '취소', style: 'cancel' },
+          { text: '열기', onPress: () => void openExternal() },
+        ]);
       })();
       break;
     case 'SET_HEADER':
@@ -538,6 +557,12 @@ export function handleBridgeMessage(
         url: message.url,
         title: message.title,
         provider: message.provider,
+      });
+      break;
+    case 'OPEN_NATIVE_LOGIN':
+      router.push({
+        pathname: '/login',
+        params: { returnTo: message.returnTo ?? '/' },
       });
       break;
     case 'LOGIN_SUCCESS':

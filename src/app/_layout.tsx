@@ -15,7 +15,14 @@ export default function RootLayout() {
           <StatusBar style="dark" />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
-            <Stack.Screen name="login" />
+            <Stack.Screen
+              name="login"
+              options={{
+                presentation: 'card',
+                animation: 'slide_from_right',
+                gestureEnabled: true,
+              }}
+            />
             <Stack.Screen
               name="oauth"
               options={{

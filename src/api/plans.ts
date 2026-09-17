@@ -1,6 +1,6 @@
 import { apiFetch } from './http';
 
-export type TravelPlanStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED';
+export type TravelPlanStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
 /** GET /api/plans 목록 아이템 */
 export type TravelPlanSummary = {

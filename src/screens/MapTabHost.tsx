@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
@@ -18,6 +18,10 @@ import {
 import { registerBridgeWebView } from '../bridge/webviewRegistry';
 import { getStoredWebAuth } from '../auth/webAuthSession';
 import { WEB_BASE_URL } from '../constants/config';
+import {
+  getMapTabRefreshSeq,
+  subscribeMapTabRefresh,
+} from '../pendingMapRefresh';
 import MapScreen from '../screens/MapScreen';
 
 const HIDE_WEB_CHROME = `
@@ -40,6 +44,14 @@ const HIDE_WEB_CHROME = `
 export default function MapTabHost(): React.JSX.Element {
   const webviewRef = useRef<WebView>(null);
   const unregisterRef = useRef<(() => void) | null>(null);
+  // 로그인/로그아웃(requestMapTabRefresh) 시 네이티브 지도 상태를 통째로 초기화
+  const [mapScreenKey, setMapScreenKey] = useState(() => getMapTabRefreshSeq());
+
+  useEffect(() => {
+    return subscribeMapTabRefresh((seq) => {
+      setMapScreenKey(seq);
+    });
+  }, []);
 
   const attachWebView = useCallback((instance: WebView | null) => {
     unregisterRef.current?.();
@@ -136,7 +148,7 @@ export default function MapTabHost(): React.JSX.Element {
   return (
     <View style={styles.root}>
       <View style={styles.mapLayer}>
-        <MapScreen />
+        <MapScreen key={mapScreenKey} />
       </View>
       {/*
         WebView는 Yoga에서 intrinsic size를 잡아 지도 아래에 빈 칸을 만들 수 있음.

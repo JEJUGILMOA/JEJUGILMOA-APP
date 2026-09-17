@@ -1,6 +1,3 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Linking, Platform, Share, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   NaverMapCircleOverlay,
   NaverMapMarkerOverlay,
@@ -9,10 +6,14 @@ import {
   type NaverMapViewRef,
 } from '@mj-studio/react-native-naver-map';
 import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Linking, Platform, Share, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchMapHeatmap, fetchMapPlaces, type MapBounds } from '../api/map';
 import { type TravelPlanSummary } from '../api/plans';
 import type { CurrentTripDto } from '../api/trips';
+import type { MapTripFromWeb } from '../bridge/mapBridgeTypes';
 import {
   clearTripCompleteResult,
   clearTripStoreError,
@@ -22,28 +23,20 @@ import {
   subscribeMapPlanDetail,
   subscribeMapTrip,
 } from '../bridge/mapDataStore';
-import type { MapTripFromWeb } from '../bridge/mapBridgeTypes';
 import {
   markPlanListLoading,
   subscribePlanList,
 } from '../bridge/planListStore';
-import { broadcastToWeb } from '../bridge/webviewRegistry';
+import { broadcastToWeb, sendToTabWeb } from '../bridge/webviewRegistry';
 import ActiveTripEmptySheet from '../components/map/ActiveTripEmptySheet';
 import ActiveTripSheet from '../components/map/ActiveTripSheet';
 import ActiveTripStatusBanner from '../components/map/ActiveTripStatusBanner';
 import BadgeUnlockModal from '../components/map/BadgeUnlockModal';
-import TripCompleteModal, {
-  type TripCompleteSummary,
-} from '../components/map/TripCompleteModal';
 import CategoryChips from '../components/map/CategoryChips';
 import CategoryMapPin, {
   CATEGORY_PIN_SELECTED_SIZE,
   CATEGORY_PIN_SIZE,
 } from '../components/map/CategoryMapPin';
-import PlanDayMapPin, {
-  PLAN_DAY_PIN_SELECTED_SIZE,
-  PLAN_DAY_PIN_SIZE,
-} from '../components/map/PlanDayMapPin';
 import HeatmapLegend from '../components/map/HeatmapLegend';
 import MapLayersButton from '../components/map/MapLayersButton';
 import MapTopBar from '../components/map/MapTopBar';
@@ -51,6 +44,10 @@ import ModeBottomSheet from '../components/map/ModeBottomSheet';
 import MyLocationButton from '../components/map/MyLocationButton';
 import PlaceDetailChrome from '../components/map/PlaceDetailChrome';
 import PlaceDetailSheet from '../components/map/PlaceDetailSheet';
+import PlanDayMapPin, {
+  PLAN_DAY_PIN_SELECTED_SIZE,
+  PLAN_DAY_PIN_SIZE,
+} from '../components/map/PlanDayMapPin';
 import PlanListPanel, {
   PLAN_LIST_PANEL_HEIGHT_RATIO,
 } from '../components/map/PlanListPanel';
@@ -59,6 +56,9 @@ import PlanSummaryPanel, {
 } from '../components/map/PlanSummaryPanel';
 import SearchHereButton from '../components/map/SearchHereButton';
 import SearchModal from '../components/map/SearchModal';
+import TripCompleteModal, {
+  type TripCompleteSummary,
+} from '../components/map/TripCompleteModal';
 import VisitCompleteModal from '../components/map/VisitCompleteModal';
 import {
   JEJU_CENTER,
@@ -68,32 +68,20 @@ import {
   type PlaceCategory,
 } from '../constants/map';
 import { useAuth } from '../context/AuthContext';
-import { useTabRepress } from '../hooks/useTabRepress';
 import {
   type ActiveTripBadge,
   type ActiveTripStop,
 } from '../data/mapDummy';
-import { setPendingWebPath } from '../pendingWebPath';
+import { useTabRepress } from '../hooks/useTabRepress';
 import { takePendingMapMode } from '../pendingMapMode';
 import {
   getMapTabRefreshSeq,
+  requestMapTabRefresh,
   subscribeMapTabRefresh,
 } from '../pendingMapRefresh';
+import { setPendingWebPath } from '../pendingWebPath';
 import type { HeatZone, Place, PlanTravelLeg, PlanWaypoint } from '../types/map';
-import {
-  dayPathsFromWaypoints,
-  formatPlanDurationLabel,
-  orientDayPaths,
-} from '../utils/planMapMappers';
-import { categoryFromApiName } from '../utils/mapMappers';
-import {
-  deriveTripProgress,
-  formatVerifiedAt,
-  mapTripWaypointsToStops,
-  type TripMapCoord,
-} from '../utils/tripMapMappers';
 import { getDeviceCoordinates } from '../utils/deviceLocation';
-import { isTripVisitSpoofEnabled, initTripVisitSpoof } from '../utils/tripVisitSpoof';
 import {
   boundsEqual,
   boundsFromRegion,
@@ -104,15 +92,36 @@ import {
 } from '../utils/mapBounds';
 import { ensureMapLocationPermission } from '../utils/mapLocationPermission';
 import {
-  mapHeatmapDtoToZone,
+  categoryFromApiName, mapHeatmapDtoToZone,
   mapPlaceDtoToPlace,
-  PLACE_CATEGORY_API_NAME,
+  PLACE_CATEGORY_API_NAME
 } from '../utils/mapMappers';
+import {
+  dayPathsFromWaypoints,
+  formatPlanDurationLabel,
+  orientDayPaths,
+  toFiniteCoord,
+} from '../utils/planMapMappers';
+import {
+  deriveTripProgress,
+  formatVerifiedAt,
+  mapTripWaypointsToStops,
+  type TripMapCoord,
+} from '../utils/tripMapMappers';
+import { initTripVisitSpoof, isTripVisitSpoofEnabled } from '../utils/tripVisitSpoof';
 
 export type { Place } from '../types/map';
 
 /** PathOverlay direction chevron pattern */
 const PATH_ARROW_PATTERN = require('../../assets/map/path_arrow.png');
+
+/** QA: 방문 인증 후 항상 뱃지 모달 (확인 후 false) */
+const FORCE_BADGE_AFTER_VISIT = true;
+const FORCE_VISIT_BADGE = {
+  badgeId: -9001,
+  name: '테스트 뱃지',
+  description: '방문 인증 QA용 — 서버 응답과 무관',
+} as const;
 
 const TOP_BAR_BLOCK = 56;
 const CATEGORY_ROW = 40;
@@ -219,6 +228,8 @@ export default function MapScreen(): React.JSX.Element {
   const pendingCompleteBadgesRef = useRef<
     { badgeId: number; name: string; description?: string; imageUrl?: string }[]
   >([]);
+  /** 여행 완료 후 뱃지 닫을 때만 trip 클리어 */
+  const clearTripAfterBadgeRef = useRef(false);
   const tripMetaRef = useRef(tripMeta);
   tripMetaRef.current = tripMeta;
   const tripStopsRef = useRef(tripStops);
@@ -445,26 +456,9 @@ export default function MapScreen(): React.JSX.Element {
   useTabRepress(
     'map',
     useCallback(() => {
-      setMode('general');
-      setCategory('all');
-      setSelectedPlace(null);
-      setModeSheetOpen(false);
-      setSearchOpen(false);
-      setPlanView('list');
-      setSelectedTravelPlan(null);
-      setPlanWaypoints([]);
-      setPlanLegs([]);
-      setPlanDayRoutes([]);
-      setSelectedPlanId(null);
-      setSelectedPlanDayNumber(null);
-      setSelectedTripDayNumber(null);
-      setSelectedTripStopId(null);
-      setTripApiDayRoutes([]);
-      setVisitModalOpen(false);
-      setBadgeModalOpen(false);
-      setVerifiedStop(null);
-      animateTo(JEJU_CENTER.latitude, JEJU_CENTER.longitude, 10);
-    }, [animateTo]),
+      // MapTabHost가 MapScreen을 remount → 모드/시트/진행중 여행 상태 초기화 + REQUEST_* 재호출
+      requestMapTabRefresh();
+    }, []),
   );
 
   /** 계획 모드 진입 시 목록으로 리셋 + 내 계획 조회 */
@@ -487,6 +481,12 @@ export default function MapScreen(): React.JSX.Element {
     setSelectedPlanDayNumber(null);
     setSelectedPlace(null);
 
+    if (!isAuthenticated) {
+      setPlanSummaries([]);
+      setPlanListLoading(false);
+      return;
+    }
+
     markPlanListLoading();
     broadcastToWeb({ type: 'REQUEST_PLAN_SUMMARIES' });
     return subscribePlanList((next) => {
@@ -496,7 +496,7 @@ export default function MapScreen(): React.JSX.Element {
         // console.warn('[map] plan list from web failed', next.error);
       }
     });
-  }, [mode]);
+  }, [mode, isAuthenticated]);
 
   /** 계획 경유지 전체가 보이도록 Region 맞춤 (south-west + delta) */
   const fitPlanWaypoints = useCallback((waypoints: PlanWaypoint[]) => {
@@ -546,10 +546,20 @@ export default function MapScreen(): React.JSX.Element {
     return () => clearTimeout(timer);
   }, [isPlanDetail, planWaypoints, fitPlanWaypoints]);
 
+  // 진행중 여행: 처음 들어올 때만 bounds fit.
+  // 방문 인증·스킵으로 tripStops가 바뀔 때마다 다시 fit 하면 카메라가 계속 흔들린다.
+  const activeTripCameraFitKeyRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!showActiveTripLive) {
+    if (!showActiveTripLive || tripMeta?.tripId == null || tripStops.length === 0) {
+      if (!showActiveTripLive) {
+        activeTripCameraFitKeyRef.current = null;
+      }
       return;
     }
+    if (activeTripCameraFitKeyRef.current === tripMeta.tripId) {
+      return;
+    }
+    activeTripCameraFitKeyRef.current = tripMeta.tripId;
     const points = tripStops.map((stop) => ({
       id: stop.id,
       name: stop.place.name,
@@ -562,7 +572,7 @@ export default function MapScreen(): React.JSX.Element {
       fitPlanWaypoints(points);
     }, 180);
     return () => clearTimeout(timer);
-  }, [showActiveTripLive, tripStops, fitPlanWaypoints]);
+  }, [showActiveTripLive, tripMeta?.tripId, tripStops, fitPlanWaypoints]);
 
   const handleSelectPlace = useCallback(
     (place: Place) => {
@@ -645,17 +655,25 @@ export default function MapScreen(): React.JSX.Element {
         return;
       }
       const detail = next.detail;
-      const waypoints = detail.waypoints.map((wp) => ({
-        id: wp.id,
-        name: wp.name,
-        latitude: wp.latitude,
-        longitude: wp.longitude,
-        category: categoryFromApiName(wp.categoryName),
-        imageUrl: wp.imageUrl,
-        address: wp.address,
-        order: wp.order,
-        dayNumber: wp.dayNumber ?? 1,
-      }));
+      // 웹 MAP_PLAN_DETAIL 좌표를 그대로 신뢰하지 않음 — 문자열/누락이면 마커가 조용히 안 찍힘
+      const waypoints = detail.waypoints.flatMap((wp) => {
+        const latitude = toFiniteCoord(wp.latitude);
+        const longitude = toFiniteCoord(wp.longitude);
+        if (latitude == null || longitude == null) return [];
+        return [
+          {
+            id: wp.id,
+            name: wp.name,
+            latitude,
+            longitude,
+            category: categoryFromApiName(wp.categoryName),
+            imageUrl: wp.imageUrl,
+            address: wp.address,
+            order: wp.order,
+            dayNumber: wp.dayNumber ?? 1,
+          },
+        ];
+      });
       setPlanWaypoints(waypoints);
       setPlanDurationLabel(detail.durationLabel);
       const fromPayload = (detail.dayRoutes ?? [])
@@ -688,39 +706,74 @@ export default function MapScreen(): React.JSX.Element {
     router.navigate('/(tabs)/plan');
   }, [selectedTravelPlan?.planId]);
 
-  const applyTripFromWeb = useCallback((trip: MapTripFromWeb | null) => {
-    if (!trip) {
-      setTripMeta(null);
-      setTripStops([]);
-      setTripCurrentIndex(0);
-      setTripVisitedCount(0);
-      setSelectedTripDayNumber(null);
-      setSelectedTripStopId(null);
-      setTripApiDayRoutes([]);
-      return;
-    }
-    const stops = mapTripWaypointsToStops(trip.waypoints ?? []);
-    const progress = deriveTripProgress(stops);
-    setTripMeta({
-      tripId: trip.tripId,
-      title: trip.title,
-      status: trip.status,
-      actualStartedAt: trip.actualStartedAt,
-      waypoints: trip.waypoints,
+  /**
+   * 진행중 여행 UI 반영.
+   * - null/빈 waypoints로 기존 시트를 덮어쓰지 않음 (방문 직후 레이스 방지)
+   * - clear:true 일 때만 의도적으로 비움 (완료·로그아웃)
+   */
+  const applyTripFromWeb = useCallback(
+    (trip: MapTripFromWeb | null, options?: { clear?: boolean }) => {
+      if (!trip) {
+        if (!options?.clear && tripStopsRef.current.length > 0) {
+          return;
+        }
+        setTripMeta(null);
+        setTripStops([]);
+        setTripCurrentIndex(0);
+        setTripVisitedCount(0);
+        setSelectedTripDayNumber(null);
+        setSelectedTripStopId(null);
+        setTripApiDayRoutes([]);
+        return;
+      }
+
+      const stops = mapTripWaypointsToStops(trip.waypoints ?? []);
+      if (stops.length === 0 && tripStopsRef.current.length > 0) {
+        return;
+      }
+
+      const progress = deriveTripProgress(stops);
+      setTripMeta({
+        tripId: trip.tripId,
+        title: trip.title || tripMetaRef.current?.title || '진행중 여행',
+        status: trip.status,
+        actualStartedAt: trip.actualStartedAt,
+        waypoints: trip.waypoints,
+      });
+      setTripStops(stops);
+      setTripCurrentIndex(progress.currentIndex);
+      setTripVisitedCount(progress.visitedCount);
+      const current = stops[progress.currentIndex];
+      setSelectedTripDayNumber(current?.dayNumber ?? stops[0]?.dayNumber ?? 1);
+      setSelectedTripStopId(current?.id ?? stops[0]?.id ?? null);
+      const fromApi = (trip.dayRoutes ?? [])
+        .filter((route) => route.path.length >= 2)
+        .map((route) => ({
+          dayNumber: route.dayNumber,
+          coords: route.path,
+        }));
+      // 방문 응답에 dayRoutes가 없으면 기존 경로 유지
+      if (fromApi.length > 0) {
+        setTripApiDayRoutes(fromApi);
+      }
+    },
+    [],
+  );
+
+  const requestCurrentTrip = useCallback(() => {
+    setTripLoading(true);
+    markTripLoading();
+    broadcastToWeb({ type: 'REQUEST_CURRENT_TRIP' });
+  }, []);
+
+  /** 여행 완료 후 계획 탭·지도 계획 목록 갱신 */
+  const refreshPlansAfterTripComplete = useCallback(() => {
+    sendToTabWeb('plan', {
+      type: 'INVALIDATE_DATA',
+      scopes: ['plans', 'currentTrip'],
     });
-    setTripStops(stops);
-    setTripCurrentIndex(progress.currentIndex);
-    setTripVisitedCount(progress.visitedCount);
-    const current = stops[progress.currentIndex];
-    setSelectedTripDayNumber(current?.dayNumber ?? stops[0]?.dayNumber ?? 1);
-    setSelectedTripStopId(current?.id ?? stops[0]?.id ?? null);
-    const fromApi = (trip.dayRoutes ?? [])
-      .filter((route) => route.path.length >= 2)
-      .map((route) => ({
-        dayNumber: route.dayNumber,
-        coords: route.path,
-      }));
-    setTripApiDayRoutes(fromApi);
+    markPlanListLoading();
+    broadcastToWeb({ type: 'REQUEST_PLAN_SUMMARIES' });
   }, []);
 
   const handleTripCompleteClose = useCallback(() => {
@@ -729,36 +782,62 @@ export default function MapScreen(): React.JSX.Element {
     const badges = pendingCompleteBadgesRef.current;
     pendingCompleteBadgesRef.current = [];
     if (badges.length > 0) {
+      clearTripAfterBadgeRef.current = true;
       openBadgeUnlock(badges);
+      return;
     }
-    applyTripFromWeb(null);
+    applyTripFromWeb(null, { clear: true });
   }, [openBadgeUnlock, applyTripFromWeb]);
 
+  const handleBadgeUnlockClose = useCallback(() => {
+    setBadgeModalOpen(false);
+    if (clearTripAfterBadgeRef.current) {
+      clearTripAfterBadgeRef.current = false;
+      applyTripFromWeb(null, { clear: true });
+    }
+  }, [applyTripFromWeb]);
+
+  const openTripCompleteRef = useRef(openTripComplete);
+  openTripCompleteRef.current = openTripComplete;
+  const applyTripFromWebRef = useRef(applyTripFromWeb);
+  applyTripFromWebRef.current = applyTripFromWeb;
+  const requestCurrentTripRef = useRef(requestCurrentTrip);
+  requestCurrentTripRef.current = requestCurrentTrip;
+  const refreshPlansAfterTripCompleteRef = useRef(refreshPlansAfterTripComplete);
+  refreshPlansAfterTripCompleteRef.current = refreshPlansAfterTripComplete;
+
+  /**
+   * 진행중 여행 모드:
+   * 1) 진입 시 1회 조회
+   * 2) 구독으로 방문/완료/조회 결과만 반영
+   * mapRefreshKey로 effect를 찢지 않음 → 시트 언마운트 레이스 제거
+   */
   useEffect(() => {
     if (mode !== 'activeTrip') {
       setTripLoading(false);
       return;
     }
     if (!isAuthenticated) {
-      applyTripFromWeb(null);
+      applyTripFromWebRef.current(null, { clear: true });
       setTripLoading(false);
       return;
     }
-    setTripLoading(true);
-    markTripLoading();
-    broadcastToWeb({ type: 'REQUEST_CURRENT_TRIP' });
+
+    requestCurrentTripRef.current();
+
     return subscribeMapTrip((next) => {
       setTripLoading(next.loading);
+
       if (next.visitError) {
         Alert.alert('여행 진행 실패', next.visitError);
-        // 긴 raw JSON도 Metro/Logcat에서 볼 수 있게 남긴다
-        // console.warn('[map] visit/skip error detail\n', next.visitError);
         clearTripVisitError();
       }
+
       if (next.completeResult) {
         const result = next.completeResult;
         pendingExpectingCompleteRef.current = false;
-        openTripComplete(
+        refreshPlansAfterTripCompleteRef.current();
+        openTripCompleteRef.current(
           {
             title: result.title ?? tripMetaRef.current?.title ?? '여행',
             durationDays: result.durationDays,
@@ -774,14 +853,14 @@ export default function MapScreen(): React.JSX.Element {
         clearTripCompleteResult();
         return;
       }
+
       if (next.error) {
-        // console.warn('[map] current trip / complete failed', next.error);
         if (pendingExpectingCompleteRef.current) {
           pendingExpectingCompleteRef.current = false;
           const message = next.error;
           clearTripStoreError();
           Alert.alert('여행 완료 실패', message);
-          openTripComplete(
+          openTripCompleteRef.current(
             {
               title: tripMetaRef.current?.title ?? '여행',
               placeCount: tripStopsRef.current.length,
@@ -790,11 +869,16 @@ export default function MapScreen(): React.JSX.Element {
           );
           return;
         }
-        applyTripFromWeb(null);
+        // 이미 시트에 여행이 있으면 조회 실패로 지우지 않음
+        if (tripStopsRef.current.length === 0) {
+          applyTripFromWebRef.current(null, { clear: true });
+        }
         return;
       }
+
       if (next.trip) {
-        applyTripFromWeb(next.trip);
+        applyTripFromWebRef.current(next.trip);
+
         const pending = pendingVisitStopRef.current;
         if (pending && !next.visitError) {
           const updated = (next.trip.waypoints ?? []).find(
@@ -806,25 +890,43 @@ export default function MapScreen(): React.JSX.Element {
             setVerifiedStop(pending);
             setVerifiedAtLabel(formatVerifiedAt(updated.visitedAt));
             setVisitModalOpen(true);
-            pendingVisitBadgesRef.current = next.visitEarnedBadges ?? [];
+
+            const earned = next.visitEarnedBadges ?? [];
+            pendingVisitBadgesRef.current =
+              FORCE_BADGE_AFTER_VISIT && earned.length === 0
+                ? [{ ...FORCE_VISIT_BADGE }]
+                : earned;
             pendingVisitAutoCompletedRef.current = next.visitAutoCompleted;
             pendingVisitTripDoneRef.current =
               next.visitAutoCompleted || progressAfterVisit.allVisited;
             pendingVisitStopRef.current = null;
+
+            // 방문 반영 후 전체 스냅샷 한 번 더 (경로 등) — 기존 UI는 soft apply로 유지
+            requestCurrentTripRef.current();
           }
         }
-      } else if (!next.loading) {
-        applyTripFromWeb(null);
+        return;
+      }
+
+      // loading 끝 + trip 없음 → 초기 진입에만 빈 상태
+      if (!next.loading && tripStopsRef.current.length === 0) {
+        applyTripFromWebRef.current(null, { clear: true });
       }
     });
-  }, [mode, isAuthenticated, applyTripFromWeb, openTripComplete, mapRefreshKey]);
+  }, [mode, isAuthenticated]);
+
+  /** 여행 시작 등: 진행중 모드면 soft 재조회만 (구독/시트는 유지) */
+  useEffect(() => {
+    if (mapRefreshKey === 0 || mode !== 'activeTrip' || !isAuthenticated) return;
+    requestCurrentTrip();
+  }, [mapRefreshKey, mode, isAuthenticated, requestCurrentTrip]);
 
   /** 여행 시작 후 계획 모드 목록도 최신화 */
   useEffect(() => {
-    if (mapRefreshKey === 0 || mode !== 'plan') return;
+    if (mapRefreshKey === 0 || mode !== 'plan' || !isAuthenticated) return;
     markPlanListLoading();
     broadcastToWeb({ type: 'REQUEST_PLAN_SUMMARIES' });
-  }, [mapRefreshKey, mode]);
+  }, [mapRefreshKey, mode, isAuthenticated]);
 
   const handleSelectTripStop = useCallback(
     (stop: ActiveTripStop, _index: number) => {
@@ -909,16 +1011,20 @@ export default function MapScreen(): React.JSX.Element {
   const handleVisitNextDestination = useCallback(() => {
     setVisitModalOpen(false);
 
-    const badges = pendingVisitBadgesRef.current;
+    const badges =
+      FORCE_BADGE_AFTER_VISIT && pendingVisitBadgesRef.current.length === 0
+        ? [{ ...FORCE_VISIT_BADGE }]
+        : pendingVisitBadgesRef.current;
     pendingVisitBadgesRef.current = [];
     const autoCompleted = pendingVisitAutoCompletedRef.current;
     pendingVisitAutoCompletedRef.current = false;
     const tripDone = pendingVisitTripDoneRef.current;
     pendingVisitTripDoneRef.current = false;
 
-    // 마지막 경유지(자동완료 또는 전 지점 방문) — 뱃지보다 여행 완료를 우선
+    // 마지막 경유지 — 여행 완료 우선, 뱃지는 완료 모달 닫은 뒤
     if (autoCompleted || tripDone) {
       if (autoCompleted) {
+        refreshPlansAfterTripComplete();
         openTripComplete(
           {
             title: tripMeta?.title ?? '여행',
@@ -939,6 +1045,7 @@ export default function MapScreen(): React.JSX.Element {
         return;
       }
 
+      refreshPlansAfterTripComplete();
       openTripComplete(
         {
           title: tripMeta?.title ?? '여행',
@@ -958,6 +1065,7 @@ export default function MapScreen(): React.JSX.Element {
     tripMeta?.title,
     openBadgeUnlock,
     openTripComplete,
+    refreshPlansAfterTripComplete,
   ]);
 
   const handleMyLocation = useCallback(async () => {
@@ -1378,6 +1486,14 @@ export default function MapScreen(): React.JSX.Element {
             <PlanListPanel
               plans={planSummaries}
               loading={planListLoading}
+              loginRequired={!isAuthenticated}
+              onGoGeneralMap={() => setMode('general')}
+              onLogin={() => {
+                router.push({
+                  pathname: '/login',
+                  params: { returnTo: '/map?mode=plan' },
+                });
+              }}
               onSelectPlan={(plan) => {
                 void handleSelectTravelPlan(plan);
               }}
@@ -1403,6 +1519,7 @@ export default function MapScreen(): React.JSX.Element {
       <ActiveTripEmptySheet
         visible={showActiveTripEmpty}
         underOverlay={modeSheetOpen}
+        loginRequired={!isAuthenticated}
         onGoGeneralMap={() => setMode('general')}
       />
 
@@ -1422,6 +1539,29 @@ export default function MapScreen(): React.JSX.Element {
         }}
       />
 
+      <PlaceDetailSheet
+        place={selectedPlace}
+        onClose={() => setSelectedPlace(null)}
+        onAddToCourse={handleAddToCourse}
+        onSetDestination={handleSetDestination}
+      />
+
+      <SearchModal
+        visible={searchOpen}
+        places={mapPlaces}
+        onClose={() => setSearchOpen(false)}
+        onSelectPlace={handleSelectPlace}
+      />
+
+      {/* 모드 시트는 시트류 최상단 */}
+      <ModeBottomSheet
+        visible={modeSheetOpen}
+        currentMode={mode}
+        onSelectMode={setMode}
+        onClose={() => setModeSheetOpen(false)}
+      />
+
+      {/* 방문/완료/배지: RN Modal 대신 오버레이 — 바텀시트 접힘 방지 */}
       {verifiedStop ? (
         <VisitCompleteModal
           visible={visitModalOpen}
@@ -1448,31 +1588,9 @@ export default function MapScreen(): React.JSX.Element {
           badge={unlockedBadge}
           recentLabels={[]}
           extraCount={0}
-          onClose={() => setBadgeModalOpen(false)}
+          onClose={handleBadgeUnlockClose}
         />
       ) : null}
-
-      <PlaceDetailSheet
-        place={selectedPlace}
-        onClose={() => setSelectedPlace(null)}
-        onAddToCourse={handleAddToCourse}
-        onSetDestination={handleSetDestination}
-      />
-
-      <SearchModal
-        visible={searchOpen}
-        places={mapPlaces}
-        onClose={() => setSearchOpen(false)}
-        onSelectPlace={handleSelectPlace}
-      />
-
-      {/* 모드 시트는 항상 최상단 (다른 시트/오버레이 위) */}
-      <ModeBottomSheet
-        visible={modeSheetOpen}
-        currentMode={mode}
-        onSelectMode={setMode}
-        onClose={() => setModeSheetOpen(false)}
-      />
     </View>
   );
 }

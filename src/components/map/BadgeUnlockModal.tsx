@@ -1,96 +1,135 @@
 import React, { useEffect, useRef } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import MapText from './MapText';
-import {
-  ConfettiCanvas,
-  presets,
-  useConfetti,
-} from 'react-native-confetti-reanimated';
 
 import { MapTokens } from '../../constants/map';
 import type { ActiveTripBadge } from '../../data/mapDummy';
 import { StarIcon } from './MapIcons';
-
-const BADGE_CONFETTI_COLORS = [
-  MapTokens.green,
-  MapTokens.amber,
-  MapTokens.yellow,
-  '#FFFFFF',
-  MapTokens.greenSoft,
-] as const;
+import SafeConfettiBurst from './SafeConfettiBurst';
 
 type Props = {
   visible: boolean;
   badge: ActiveTripBadge;
-  recentLabels: readonly string[];
-  extraCount: number;
+  recentLabels?: readonly string[];
+  extraCount?: number;
   onClose: () => void;
 };
 
-/** MAP-03c: 배지 획득 모달 + 축하 컨페티 */
+/**
+ * MAP-03c: 배지 획득 오버레이
+ * 컨페티는 Reanimated 패키지 대신 SafeConfettiBurst(RN Animated) 사용.
+ */
 export default function BadgeUnlockModal({
   visible,
   badge,
-  recentLabels,
-  extraCount,
+  recentLabels = [],
+  extraCount = 0,
   onClose,
-}: Props): React.JSX.Element {
-  const { confettiRef, fire, reset } = useConfetti();
-  const firedForSession = useRef(false);
-  const progress = badge.total > 0 ? badge.collected / badge.total : 0;
+}: Props): React.JSX.Element | null {
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const cardScale = useRef(new Animated.Value(0.88)).current;
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const medalScale = useRef(new Animated.Value(0.6)).current;
+  const medalRotate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!visible) {
-      firedForSession.current = false;
-      reset();
+      backdropOpacity.setValue(0);
+      cardScale.setValue(0.88);
+      cardOpacity.setValue(0);
+      medalScale.setValue(0.6);
+      medalRotate.setValue(0);
       return;
     }
 
-    if (firedForSession.current) {
-      return;
-    }
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
+      Animated.timing(cardOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }),
+      Animated.spring(cardScale, {
+        toValue: 1,
+        friction: 7,
+        tension: 80,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(80),
+        Animated.spring(medalScale, {
+          toValue: 1,
+          friction: 5,
+          tension: 120,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.sequence([
+        Animated.delay(80),
+        Animated.timing(medalRotate, {
+          toValue: 1,
+          duration: 520,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, [visible, backdropOpacity, cardOpacity, cardScale, medalScale, medalRotate]);
 
-    const launchTimer = setTimeout(() => {
-      firedForSession.current = true;
-      void fire({
-        ...presets.fireworks,
-        colors: [...BADGE_CONFETTI_COLORS],
-        origin: { x: 0.5, y: 0.34 },
-      });
-      setTimeout(() => {
-        void fire({
-          ...presets.stars,
-          particleCount: 36,
-          colors: [...BADGE_CONFETTI_COLORS],
-          origin: { x: 0.5, y: 0.36 },
-          spread: 100,
-        });
-      }, 220);
-    }, 280);
+  if (!visible) {
+    return null;
+  }
 
-    return () => clearTimeout(launchTimer);
-  }, [visible, fire, reset]);
+  const progress = badge.total > 0 ? badge.collected / badge.total : 0;
+  const medalSpin = medalRotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-12deg', '0deg'],
+  });
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <ConfettiCanvas
-          ref={confettiRef}
-          fullScreen
-          zIndex={20}
-          containerStyle={styles.confettiLayer}
-        />
+    <View style={styles.overlay} pointerEvents="box-none">
+      <Pressable style={styles.backdropHit} onPress={onClose}>
+        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
+      </Pressable>
+
+      <SafeConfettiBurst active={visible} />
+
+      <Animated.View
+        style={[
+          styles.cardWrap,
+          {
+            opacity: cardOpacity,
+            transform: [{ scale: cardScale }],
+          },
+        ]}
+        pointerEvents="box-none"
+      >
         <Pressable style={styles.card} onPress={() => undefined}>
           <View style={styles.hero}>
             <MapText style={styles.heroLabel}>NEW BADGE</MapText>
-            <View style={styles.medal}>
+            <Animated.View
+              style={[
+                styles.medal,
+                {
+                  transform: [{ scale: medalScale }, { rotate: medalSpin }],
+                },
+              ]}
+            >
               <StarIcon color="#FFFFFF" size={36} />
-            </View>
+            </Animated.View>
           </View>
 
           <View style={styles.body}>
             <MapText style={styles.title}>{badge.title}</MapText>
-            <MapText style={styles.desc}>{badge.description}</MapText>
+            {badge.description ? (
+              <MapText style={styles.desc}>{badge.description}</MapText>
+            ) : null}
 
             <View style={styles.progressHeader}>
               <MapText style={styles.progressLabel}>배지 수집 현황</MapText>
@@ -102,45 +141,54 @@ export default function BadgeUnlockModal({
               <View style={[styles.progressFill, { width: `${Math.min(progress, 1) * 100}%` }]} />
             </View>
 
-            <View style={styles.badgeRow}>
-              {recentLabels.map((label) => (
-                <View key={label} style={styles.badgeChip}>
-                  <MapText style={styles.badgeChipText}>{label}</MapText>
-                </View>
-              ))}
-              <View style={styles.moreChip}>
-                <MapText style={styles.moreText}>+{extraCount}</MapText>
+            {recentLabels.length > 0 || extraCount > 0 ? (
+              <View style={styles.badgeRow}>
+                {recentLabels.map((label) => (
+                  <View key={label} style={styles.badgeChip}>
+                    <MapText style={styles.badgeChipText}>{label}</MapText>
+                  </View>
+                ))}
+                {extraCount > 0 ? (
+                  <View style={styles.moreChip}>
+                    <MapText style={styles.moreText}>+{extraCount}</MapText>
+                  </View>
+                ) : null}
               </View>
-            </View>
+            ) : null}
+
+            <Pressable style={styles.confirmButton} onPress={onClose}>
+              <MapText style={styles.confirmLabel}>확인</MapText>
+            </Pressable>
           </View>
         </Pressable>
-      </Pressable>
-    </Modal>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems: 'center',
+  overlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1000,
+    elevation: 1000,
     justifyContent: 'center',
     paddingHorizontal: 28,
   },
-  confettiLayer: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    pointerEvents: 'none',
+  backdropHit: {
+    ...StyleSheet.absoluteFill,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  cardWrap: {
+    width: '100%',
   },
   card: {
     width: '100%',
     borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: MapTokens.surface,
-    zIndex: 10,
   },
   hero: {
     backgroundColor: MapTokens.amber,
@@ -228,4 +276,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   moreText: { fontSize: 12, fontWeight: '700', color: MapTokens.textMuted },
+  confirmButton: {
+    marginTop: 6,
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: MapTokens.green,
+  },
+  confirmLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
 });

@@ -79,14 +79,6 @@ export default function ActiveTripSheet({
     [stops, visibleStops],
   );
 
-  useEffect(() => {
-    if (visible) {
-      sheetRef.current?.expand();
-    } else {
-      sheetRef.current?.close();
-    }
-  }, [visible]);
-
   // 현재 목적지가 바뀌면 그 일차로 맞추고, 해당 카드로 스크롤
   useEffect(() => {
     const current = stops[currentIndex];

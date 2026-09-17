@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import MapText from './MapText';
 
 import { MapTokens } from '../../constants/map';
@@ -16,7 +16,10 @@ type Props = {
   onClose: () => void;
 };
 
-/** MAP-03b: 방문 인증 완료 모달 */
+/**
+ * MAP-03b: 방문 인증 완료 오버레이
+ * RN Modal 사용 시 닫을 때 @gorhom/bottom-sheet가 접히는 문제 방지
+ */
 export default function VisitCompleteModal({
   visible,
   place,
@@ -25,11 +28,15 @@ export default function VisitCompleteModal({
   visitedCount,
   totalStops,
   onClose,
-}: Props): React.JSX.Element {
+}: Props): React.JSX.Element | null {
   const progress = totalStops > 0 ? visitedCount / totalStops : 0;
 
+  if (!visible) {
+    return null;
+  }
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <View style={styles.overlay} pointerEvents="box-none">
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* 카드 영역 탭이 backdrop onPress로 전파되지 않도록 흡수 */}
         <Pressable style={styles.card} onPress={() => undefined}>
@@ -61,11 +68,16 @@ export default function VisitCompleteModal({
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 900,
+    elevation: 900,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',

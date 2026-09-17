@@ -16,13 +16,23 @@ export const PLAN_LIST_PANEL_HEIGHT_RATIO = 0.4;
 type Props = {
   plans: TravelPlanSummary[];
   loading?: boolean;
+  /** 목록 조회 실패·로그인 필요 등 */
+  error?: string | null;
+  /** true면 로그인 유도 UI (일반 지도 / 로그인하기) */
+  loginRequired?: boolean;
   onSelectPlan: (plan: TravelPlanSummary) => void;
+  onGoGeneralMap?: () => void;
+  onLogin?: () => void;
 };
 
 export default function PlanListPanel({
   plans,
   loading = false,
+  error = null,
+  loginRequired = false,
   onSelectPlan,
+  onGoGeneralMap,
+  onLogin,
 }: Props): React.JSX.Element {
   return (
     <View style={styles.panel}>
@@ -35,6 +45,38 @@ export default function PlanListPanel({
         <View style={styles.centered}>
           <ActivityIndicator color={MapTokens.green} />
           <MapText style={styles.hint}>계획을 불러오는 중…</MapText>
+        </View>
+      ) : loginRequired ? (
+        <View style={styles.centered}>
+          <MapText style={styles.emptyTitle}>로그인이 필요해요</MapText>
+          <MapText style={styles.hint}>
+            {error ?? '계획 지도는 로그인 후 확인할 수 있습니다.'}
+          </MapText>
+          <View style={styles.actions}>
+            {onGoGeneralMap ? (
+              <Pressable
+                style={styles.secondaryBtn}
+                onPress={onGoGeneralMap}
+                accessibilityRole="button"
+              >
+                <MapText style={styles.secondaryText}>일반 지도로</MapText>
+              </Pressable>
+            ) : null}
+            {onLogin ? (
+              <Pressable
+                style={styles.primaryBtn}
+                onPress={onLogin}
+                accessibilityRole="button"
+              >
+                <MapText style={styles.primaryText}>로그인하기</MapText>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : error ? (
+        <View style={styles.centered}>
+          <MapText style={styles.emptyTitle}>불러오지 못했어요</MapText>
+          <MapText style={styles.hint}>{error}</MapText>
         </View>
       ) : plans.length === 0 ? (
         <View style={styles.centered}>
@@ -184,5 +226,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: MapTokens.textMuted,
     textAlign: 'center',
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginTop: 12,
+  },
+  secondaryBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: MapTokens.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: MapTokens.text,
+  },
+  primaryBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: MapTokens.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

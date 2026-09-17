@@ -12,6 +12,8 @@ type Props = {
   visible: boolean;
   underOverlay?: boolean;
   onGoGeneralMap: () => void;
+  /** true면 미로그인 안내 (진행중 여행 조회 불가) */
+  loginRequired?: boolean;
 };
 
 /** MAP-03a: 진행중 여행 없음 (미시작) */
@@ -19,6 +21,7 @@ export default function ActiveTripEmptySheet({
   visible,
   underOverlay = false,
   onGoGeneralMap,
+  loginRequired = false,
 }: Props): React.JSX.Element | null {
   const sheetRef = useRef<BottomSheet>(null);
   const insets = useSafeAreaInsets();
@@ -34,8 +37,15 @@ export default function ActiveTripEmptySheet({
   }, [visible]);
 
   const handleStartTrip = useCallback(() => {
+    if (loginRequired) {
+      router.push({
+        pathname: '/login',
+        params: { returnTo: '/map?mode=activeTrip' },
+      });
+      return;
+    }
     router.push('/(tabs)/plan');
-  }, [router]);
+  }, [loginRequired, router]);
 
   if (!visible) {
     return null;
@@ -56,9 +66,13 @@ export default function ActiveTripEmptySheet({
         <View style={styles.iconBubble}>
           <MapPinIcon color={MapTokens.textMuted} size={28} />
         </View>
-        <MapText style={styles.title}>진행중인 여행이 없어요</MapText>
+        <MapText style={styles.title}>
+          {loginRequired ? '로그인이 필요해요' : '진행중인 여행이 없어요'}
+        </MapText>
         <MapText style={styles.desc}>
-          계획을 시작한 뒤 이동 경로와 목적지를{'\n'}지도에서 바로 확인할 수 있어요
+          {loginRequired
+            ? '진행중인 여행은 로그인 후 확인할 수 있습니다'
+            : '계획을 시작한 뒤 이동 경로와 목적지를\n지도에서 바로 확인할 수 있어요'}
         </MapText>
         <View style={styles.actions}>
           <Pressable
@@ -73,7 +87,9 @@ export default function ActiveTripEmptySheet({
             onPress={handleStartTrip}
             accessibilityRole="button"
           >
-            <MapText style={styles.primaryText}>내 계획 보기</MapText>
+            <MapText style={styles.primaryText}>
+              {loginRequired ? '로그인하기' : '내 계획 보기'}
+            </MapText>
           </Pressable>
         </View>
       </BottomSheetView>
@@ -94,7 +110,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   iconBubble: {
     width: 64,
@@ -147,7 +163,7 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFFFFF',
   },
 });

@@ -16,7 +16,9 @@ import {
 } from 'react-native-webview';
 import { router, useFocusEffect } from 'expo-router';
 
-import { clearStoredWebAuth, getStoredWebAuth, setStoredWebAuth } from '../auth/webAuthSession';
+import { getStoredWebAuth } from '../auth/webAuthSession';
+import { completeNativeLogin } from '../auth/completeNativeLogin';
+import { completeNativeLogout } from '../auth/completeNativeLogout';
 import { setPendingOAuthLaunch } from '../auth/oauthLaunch';
 import {
   handleBridgeMessage,
@@ -28,7 +30,7 @@ import {
   type PlanItineraryChromeState,
   type PlanMapState,
 } from '../bridge/webviewBridge';
-import { clearPlanList, setPlanListFromWeb } from '../bridge/planListStore';
+import { setPlanListFromWeb } from '../bridge/planListStore';
 import { registerBridgeWebView } from '../bridge/webviewRegistry';
 import ItineraryChrome from '../components/map/ItineraryChrome';
 import ItineraryNativeSheet, {
@@ -44,9 +46,9 @@ import WebToast, { HIDDEN_NATIVE_TOAST } from '../components/WebToast';
 import { WEB_BASE_URL } from '../constants/config';
 import { TabBarTokens } from '../constants/tabs';
 import { useAuth } from '../context/AuthContext';
-import { setPendingNativeToast, takePendingNativeToast } from '../nativeToastQueue';
+import { takePendingNativeToast } from '../nativeToastQueue';
 import { setPendingMapMode } from '../pendingMapMode';
-import { setPendingWebPath, takePendingWebPath } from '../pendingWebPath';
+import { setPendingWebPath, takePendingWebPath, subscribeForceTabWebPath } from '../pendingWebPath';
 import { useTabRepress } from '../hooks/useTabRepress';
 import type { MapBounds } from '../api/map';
 import { JEJU_DEFAULT_BOUNDS } from '../utils/mapBounds';
@@ -158,6 +160,20 @@ export default function WebViewScreen({ path, tabName }: Props) {
     }, [tabName]),
   );
 
+  // 이미 포커스된 탭에도 강제 경로 적용 (로그아웃 후 /my 복귀 등)
+  useEffect(() => {
+    if (!tabName) return;
+    return subscribeForceTabWebPath((name, nextPath) => {
+      if (name !== tabName) return;
+      takePendingWebPath(tabName);
+      setActivePath(nextPath);
+      setHeader(HIDDEN_HEADER);
+      setPlanMap(HIDDEN_MAP);
+      setItineraryChrome(HIDDEN_ITINERARY_CHROME);
+      setSheetCollapsed(false);
+    });
+  }, [tabName]);
+
   const onMessage = useCallback((event: WebViewMessageEvent) => {
     handleBridgeMessage(event.nativeEvent.data, webviewRef.current, {
       onSetHeader: setHeader,
@@ -265,23 +281,13 @@ export default function WebViewScreen({ path, tabName }: Props) {
         });
       },
       onLoginSuccess: (payload) => {
-        void (async () => {
-          if (payload?.user) {
-            setStoredWebAuth({
-              accessToken: payload.accessToken,
-              user: payload.user,
-            });
-          } else if (payload?.accessToken) {
-            setStoredWebAuth({
-              accessToken: payload.accessToken,
-              user: { id: 'native-user', nickname: '길모아 사용자' },
-            });
-          } else {
-            clearStoredWebAuth();
-          }
-          await signIn(payload?.provider ?? 'apple');
-          router.replace('/(tabs)');
-        })();
+        void completeNativeLogin({
+          provider: payload?.provider,
+          returnTo: payload?.returnTo,
+          accessToken: payload?.accessToken,
+          user: payload?.user,
+          signIn,
+        });
       },
       onWebReady: () => {
         injectStoredWebAuthToWeb(webviewRef.current, getStoredWebAuth());
@@ -315,14 +321,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
         setPlanListFromWeb(plans, error);
       },
       onLogout: () => {
-        clearStoredWebAuth();
-        clearPlanList();
-        setPendingNativeToast({
-          kind: 'success',
-          message: '로그아웃되었어요.',
-        });
-        signOut();
-        router.replace('/login');
+        completeNativeLogout({ signOut });
       },
       onToggleTripVisitSpoof: () => {
         void (async () => {

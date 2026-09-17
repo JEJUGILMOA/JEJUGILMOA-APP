@@ -32,7 +32,22 @@ export function broadcastToWeb(message: NativeToWebMessage): void {
   });
 }
 
+/** 등록된 모든 브릿지 WebView에 대해 콜백 실행 (AUTH 재주입 등) */
+export function forEachBridgeWebView(callback: (webview: WebView) => void): void {
+  webViews.forEach((webview) => {
+    callback(webview);
+  });
+}
+
 /** 특정 탭 WebView에만 메시지 전송 */
 export function sendToTabWeb(tabName: string, message: NativeToWebMessage): void {
   sendToWeb(webViewsByTab.get(tabName) ?? null, message);
+}
+
+/** 탭에 등록된 WebView만 새로고침 (로그인 스택 WebView 제외) */
+export function reloadAllTabWebViews(excludeTabName?: string): void {
+  webViewsByTab.forEach((webview, tabName) => {
+    if (excludeTabName && tabName === excludeTabName) return;
+    webview.reload();
+  });
 }

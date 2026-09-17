@@ -71,20 +71,29 @@ export function mapPlanDetailToWaypoints(
   return result;
 }
 
+/** JSON/브릿지에서 number|string 으로 올 수 있는 좌표를 finite number로 정규화 */
+export function toFiniteCoord(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 export function placeDetailToLookup(
   dto: PlaceDetailDto,
 ): PlaceCoordLookup | null {
-  if (
-    typeof dto.latitude !== 'number' ||
-    typeof dto.longitude !== 'number' ||
-    !Number.isFinite(dto.latitude) ||
-    !Number.isFinite(dto.longitude)
-  ) {
+  const latitude = toFiniteCoord(dto.latitude);
+  const longitude = toFiniteCoord(dto.longitude);
+  if (latitude == null || longitude == null) {
     return null;
   }
   return {
-    latitude: dto.latitude,
-    longitude: dto.longitude,
+    latitude,
+    longitude,
     categoryName: dto.categoryName,
     imageUrl: dto.imageUrl,
     address: dto.address,

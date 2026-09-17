@@ -14,7 +14,7 @@ ExpoSplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 export default function SplashScreen() {
-  const { isAuthenticated, markReady } = useAuth();
+  const { markReady } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -28,15 +28,12 @@ export default function SplashScreen() {
         markReady();
         await ExpoSplashScreen.hideAsync();
 
-        if (isAuthenticated) {
-          router.replace('/(tabs)');
-        } else {
-          router.replace('/login');
-        }
+        // 게스트도 홈 탭부터 진입. 로그인은 FE/탭에서 유도.
+        router.replace('/(tabs)');
       } catch {
         await ExpoSplashScreen.hideAsync();
         if (!cancelled) {
-          router.replace('/login');
+          router.replace('/(tabs)');
         }
       }
     }
@@ -46,7 +43,7 @@ export default function SplashScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, markReady]);
+  }, [markReady]);
 
   return (
     <SafeAreaView style={styles.container}>

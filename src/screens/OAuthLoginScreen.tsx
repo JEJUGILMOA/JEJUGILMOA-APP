@@ -8,7 +8,7 @@ import { handleBridgeMessage, sendToWeb } from '@/bridge/webviewBridge';
 import PageHeader from '@/components/PageHeader';
 import { TabBarTokens } from '@/constants/tabs';
 import { takePendingOAuthLaunch } from '@/auth/oauthLaunch';
-import { clearStoredWebAuth, setStoredWebAuth } from '@/auth/webAuthSession';
+import { completeNativeLogin } from '@/auth/completeNativeLogin';
 import { useAuth, type AuthProvider } from '@/context/AuthContext';
 
 function isHttpUrl(value: string): boolean {
@@ -51,22 +51,15 @@ export default function OAuthLoginScreen() {
         accessToken?: string;
         user?: { id: string; nickname: string; profileImageUrl?: string };
       },
+      returnTo?: string,
     ) => {
-      if (auth?.accessToken) {
-        setStoredWebAuth({
-          accessToken: auth.accessToken,
-          user: auth.user ?? { id: 'native-user', nickname: '길모아 사용자' },
-        });
-      } else if (auth?.user) {
-        setStoredWebAuth({ user: auth.user });
-      } else {
-        clearStoredWebAuth();
-      }
-      await signIn(provider ?? 'kakao');
-      if (router.canDismiss()) {
-        router.dismissAll();
-      }
-      router.replace('/(tabs)');
+      await completeNativeLogin({
+        provider,
+        returnTo,
+        accessToken: auth?.accessToken,
+        user: auth?.user,
+        signIn,
+      });
     },
     [signIn],
   );
@@ -75,10 +68,14 @@ export default function OAuthLoginScreen() {
     (event: WebViewMessageEvent) => {
       handleBridgeMessage(event.nativeEvent.data, webviewRef.current, {
         onLoginSuccess: (payload) => {
-          void finishLogin(payload?.provider, {
-            accessToken: payload?.accessToken,
-            user: payload?.user,
-          });
+          void finishLogin(
+            payload?.provider,
+            {
+              accessToken: payload?.accessToken,
+              user: payload?.user,
+            },
+            payload?.returnTo,
+          );
         },
       });
     },
