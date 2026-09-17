@@ -116,7 +116,7 @@ export type { Place } from '../types/map';
 const PATH_ARROW_PATTERN = require('../../assets/map/path_arrow.png');
 
 /** QA: 방문 인증 후 항상 뱃지 모달 (확인 후 false) */
-const FORCE_BADGE_AFTER_VISIT = true;
+const FORCE_BADGE_AFTER_VISIT = false;
 const FORCE_VISIT_BADGE = {
   badgeId: -9001,
   name: '테스트 뱃지',
@@ -1069,7 +1069,10 @@ export default function MapScreen(): React.JSX.Element {
   ]);
 
   const handleMyLocation = useCallback(async () => {
-    const granted = await ensureMapLocationPermission();
+    const granted = await ensureMapLocationPermission({
+      deniedMessage:
+        '현재 위치로 이동하려면 위치 권한이 필요해요. 설정에서 위치 권한을 허용해 주세요.',
+    });
     if (!granted) {
       return;
     }

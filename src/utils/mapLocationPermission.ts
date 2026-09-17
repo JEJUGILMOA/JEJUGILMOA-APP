@@ -1,38 +1,34 @@
-import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
+import * as Location from 'expo-location';
+import { Alert, Linking } from 'react-native';
 
-const LOCATION_RATIONALE = '주변 장소와 경로 안내를 위해 현재 위치를 사용합니다.';
+const DEFAULT_DENIED_MESSAGE =
+  '현재 위치를 표시하려면 설정에서 위치 권한을 허용해 주세요.';
 
-/** Android는 런타임 권한 요청, iOS는 네이버맵 SDK가 위치 접근 시 시스템 팝업을 띄움 */
-export async function ensureMapLocationPermission(): Promise<boolean> {
-  if (Platform.OS !== 'android') {
+type EnsureOptions = {
+  /** 거부·미허용 시 Alert 본문 */
+  deniedMessage?: string;
+};
+
+/**
+ * 지도 내 위치 / 방문 인증 공통 권한 요청.
+ * Android·iOS 모두 expo-location 런타임 팝업을 띄운다.
+ */
+export async function ensureMapLocationPermission(
+  options?: EnsureOptions,
+): Promise<boolean> {
+  const { status: existing } = await Location.getForegroundPermissionsAsync();
+  if (existing === 'granted') {
     return true;
   }
 
-  const alreadyGranted = await PermissionsAndroid.check(
-    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-  );
-  if (alreadyGranted) {
-    return true;
-  }
-
-  const result = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-    {
-      title: '위치 권한',
-      message: LOCATION_RATIONALE,
-      buttonNeutral: '나중에',
-      buttonNegative: '취소',
-      buttonPositive: '허용',
-    },
-  );
-
-  if (result === PermissionsAndroid.RESULTS.GRANTED) {
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  if (status === 'granted') {
     return true;
   }
 
   Alert.alert(
     '위치 권한 필요',
-    '현재 위치를 표시하려면 설정에서 위치 권한을 허용해 주세요.',
+    options?.deniedMessage ?? DEFAULT_DENIED_MESSAGE,
     [
       { text: '취소', style: 'cancel' },
       { text: '설정 열기', onPress: () => Linking.openSettings() },
