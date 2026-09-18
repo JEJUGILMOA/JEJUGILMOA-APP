@@ -342,11 +342,6 @@ const styles = StyleSheet.create({
     backgroundColor: ITINERARY_PIN_BG,
     borderWidth: 1.5,
     borderColor: ITINERARY_PIN_FG,
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 2.5,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 3,
   },
   departureDot: {
     width: 8,

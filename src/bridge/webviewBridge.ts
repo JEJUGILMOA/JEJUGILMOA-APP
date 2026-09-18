@@ -1,5 +1,5 @@
 import type WebView from 'react-native-webview';
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import { router } from 'expo-router';
 
 import type { TravelPlanSummary } from '../api/plans';
@@ -42,6 +42,8 @@ export type PlanItineraryChromeState = {
   isSelectingDeparture: boolean;
   nextLabel: string;
   sheetTitle: string;
+  /** 장소 추가 탭일 때만 true — 시트 위 「현 위치에서 검색」 표시 여부 */
+  showSearchHere: boolean;
 };
 
 export const HIDDEN_ITINERARY_CHROME: PlanItineraryChromeState = {
@@ -54,6 +56,7 @@ export const HIDDEN_ITINERARY_CHROME: PlanItineraryChromeState = {
   isSelectingDeparture: false,
   nextLabel: '다음',
   sheetTitle: '',
+  showSearchHere: false,
 };
 
 export type ExploreMapPlace = MapPin & {
@@ -154,6 +157,7 @@ export type WebToNativeMessage =
       isSelectingDeparture?: boolean;
       nextLabel?: string;
       sheetTitle?: string;
+      showSearchHere?: boolean;
     }
   /** WebView /login 에서 Apple 버튼 → 네이티브 Sign in with Apple 요청 */
   | { type: 'REQUEST_APPLE_LOGIN' }
@@ -289,11 +293,68 @@ export type WebToNativeMessage =
       error?: string;
     }
   | { type: 'MAP_ERROR'; code?: string; message: string }
+  | {
+      type: 'MAP_PLACE_DETAIL';
+      placeId: string;
+      name?: string;
+      address?: string;
+      description?: string;
+      imageUrl?: string;
+      imageUrls?: string[];
+      photoCount?: number;
+      phone?: string;
+      homepage?: string;
+      latitude?: number;
+      longitude?: number;
+      categoryName?: string;
+      error?: string;
+    }
+  | {
+      type: 'MAP_PLACE_SEARCH_RESULTS';
+      keyword: string;
+      places: {
+        id: string;
+        name: string;
+        address?: string;
+        imageUrl?: string;
+        categoryName?: string;
+      }[];
+      error?: string;
+    }
+  | {
+      type: 'MAP_FAVORITE_PLACE_IDS';
+      placeIds: string[];
+      error?: string;
+    }
+  | {
+      type: 'MAP_PLACE_FAVORITE_RESULT';
+      placeId: string;
+      isFavorite: boolean;
+      error?: string;
+    }
   | { type: 'LOGOUT' }
   /** 설정 > 위치 7회 탭 — 방문 인증 시뮬레이션 토글 */
   | { type: 'TOGGLE_TRIP_VISIT_SPOOF' }
   /** 계획 저장·여행 시작 후 해당 탭 데이터/화면 갱신 */
-  | { type: 'REFRESH_TABS'; tabs: Array<'plan' | 'map' | 'home' | 'record' | 'my'> };
+  | { type: 'REFRESH_TABS'; tabs: Array<'plan' | 'map' | 'home' | 'record' | 'my'> }
+  | {
+      type: 'OPEN_VISITED_PLACE_SHEET';
+      place: {
+        placeId: string;
+        placeName: string;
+        address: string;
+        visitDate: string;
+        note: string;
+        photoUrls: string[];
+      };
+    }
+  | { type: 'CLOSE_VISITED_PLACE_SHEET' }
+  | {
+      type: 'OPEN_NATIVE_PHOTO_VIEWER';
+      photoUrls: string[];
+      initialIndex?: number;
+    }
+  | { type: 'CLOSE_NATIVE_PHOTO_VIEWER' };
 
 export type NativeToWebMessage =
   | { type: 'NATIVE_READY'; platform: 'ios' | 'android' }
@@ -326,11 +387,21 @@ export type NativeToWebMessage =
   | { type: 'TOAST_ACTION'; id: string }
   | { type: 'ITINERARY_DAY'; day: number }
   | { type: 'ITINERARY_SEARCH'; query: string }
+  /** 일정 지도 — 현재 뷰포트로 장소 재검색 (GET /map/places) */
+  | {
+      type: 'ITINERARY_SEARCH_HERE';
+      minLat: number;
+      maxLat: number;
+      minLng: number;
+      maxLng: number;
+    }
   | { type: 'ITINERARY_NEXT' }
   | { type: 'ITINERARY_DEPARTURE_CANCEL' }
   | { type: 'NATIVE_LAYOUT'; screenHeight: number }
   /** 같은 탭을 다시 눌렀을 때 웹을 탭 루트 경로로 되돌림 */
   | { type: 'TAB_POP_TO_ROOT'; path: string }
+  /** 로그인 후 등 — 현재 문서 히스토리 위에 경로 push (WebView remount 없이) */
+  | { type: 'NAVIGATE_WEB_PATH'; path: string }
   /** 웹 React Query 캐시 무효화 (탭 WebView별) */
   | { type: 'INVALIDATE_DATA'; scopes: Array<'plans' | 'currentTrip'> }
   | {
@@ -368,7 +439,15 @@ export type NativeToWebMessage =
       tripId: number;
       waypointId: number;
     }
-  | { type: 'REQUEST_TRIP_COMPLETE'; tripId: number };
+  | { type: 'REQUEST_TRIP_COMPLETE'; tripId: number }
+  | { type: 'REQUEST_PLACE_DETAIL'; placeId: string }
+  | { type: 'REQUEST_PLACE_SEARCH'; keyword: string }
+  | { type: 'REQUEST_FAVORITE_PLACE_IDS' }
+  | {
+      type: 'REQUEST_TOGGLE_PLACE_FAVORITE';
+      placeId: string;
+      nextFavorite: boolean;
+    };
 
 export type HeaderState = {
   visible: boolean;
@@ -426,9 +505,29 @@ export type BridgeHandlers = {
   onMapTripCompleteResult?: (
     message: Extract<WebToNativeMessage, { type: 'MAP_TRIP_COMPLETE_RESULT' }>,
   ) => void;
+  onMapPlaceDetail?: (
+    message: Extract<WebToNativeMessage, { type: 'MAP_PLACE_DETAIL' }>,
+  ) => void;
+  onMapPlaceSearchResults?: (
+    message: Extract<WebToNativeMessage, { type: 'MAP_PLACE_SEARCH_RESULTS' }>,
+  ) => void;
+  onMapFavoritePlaceIds?: (
+    message: Extract<WebToNativeMessage, { type: 'MAP_FAVORITE_PLACE_IDS' }>,
+  ) => void;
+  onMapPlaceFavoriteResult?: (
+    message: Extract<WebToNativeMessage, { type: 'MAP_PLACE_FAVORITE_RESULT' }>,
+  ) => void;
   onMapError?: (message: string) => void;
   onLogout?: () => void;
   onToggleTripVisitSpoof?: () => void;
+  onOpenVisitedPlaceSheet?: (
+    message: Extract<WebToNativeMessage, { type: 'OPEN_VISITED_PLACE_SHEET' }>,
+  ) => void;
+  onCloseVisitedPlaceSheet?: () => void;
+  onOpenNativePhotoViewer?: (
+    message: Extract<WebToNativeMessage, { type: 'OPEN_NATIVE_PHOTO_VIEWER' }>,
+  ) => void;
+  onCloseNativePhotoViewer?: () => void;
 };
 
 const HIDDEN_PLAN_MAP: PlanMapState = {
@@ -474,6 +573,19 @@ function parseWebToNative(raw: string): WebToNativeMessage | null {
   }
 }
 
+/** maps:// · maps.apple.com · geo: · Google Maps 등 외부 지도 URL */
+function isExternalMapUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return (
+    lower.startsWith('maps://') ||
+    lower.startsWith('geo:') ||
+    lower.includes('maps.apple.com') ||
+    lower.includes('google.com/maps') ||
+    lower.includes('maps.google.com')
+  );
+}
+
 export function handleBridgeMessage(
   raw: string,
   _webview: WebView | null,
@@ -496,6 +608,7 @@ export function handleBridgeMessage(
       void (async () => {
         const primaryUrl = message.url;
         const fallbackUrl = message.fallbackUrl;
+        const isMapUrl = isExternalMapUrl(primaryUrl) || isExternalMapUrl(fallbackUrl);
 
         const openExternal = async () => {
           try {
@@ -507,7 +620,15 @@ export function handleBridgeMessage(
           } catch {
             // 앱 열기 실패 시 웹으로
           }
-          if (!fallbackUrl) return;
+          if (!fallbackUrl) {
+            // canOpenURL false여도 https는 시도
+            try {
+              await Linking.openURL(primaryUrl);
+            } catch {
+              // ignore
+            }
+            return;
+          }
           try {
             await Linking.openURL(fallbackUrl);
           } catch {
@@ -515,11 +636,19 @@ export function handleBridgeMessage(
           }
         };
 
-        // 취소해도 웹이 열리지 않도록, 앱 확인을 우리가 먼저 띄운다
-        Alert.alert('지도에서 볼까요?', '네이버 지도로 이 장소를 엽니다.', [
-          { text: '취소', style: 'cancel' },
-          { text: '열기', onPress: () => void openExternal() },
-        ]);
+        // 취소해도 열리지 않도록 확인 Alert를 먼저 띄운다
+        Alert.alert(
+          isMapUrl ? '지도에서 볼까요?' : '외부 링크로 이동할까요?',
+          isMapUrl
+            ? Platform.OS === 'ios'
+              ? 'Apple 지도로 이 장소를 엽니다.'
+              : '지도 앱으로 이 장소를 엽니다.'
+            : '브라우저에서 페이지를 엽니다.',
+          [
+            { text: '취소', style: 'cancel' },
+            { text: '열기', onPress: () => void openExternal() },
+          ],
+        );
       })();
       break;
     case 'SET_HEADER':
@@ -591,6 +720,18 @@ export function handleBridgeMessage(
     case 'MAP_TRIP_COMPLETE_RESULT':
       handlers?.onMapTripCompleteResult?.(message);
       break;
+    case 'MAP_PLACE_DETAIL':
+      handlers?.onMapPlaceDetail?.(message);
+      break;
+    case 'MAP_PLACE_SEARCH_RESULTS':
+      handlers?.onMapPlaceSearchResults?.(message);
+      break;
+    case 'MAP_FAVORITE_PLACE_IDS':
+      handlers?.onMapFavoritePlaceIds?.(message);
+      break;
+    case 'MAP_PLACE_FAVORITE_RESULT':
+      handlers?.onMapPlaceFavoriteResult?.(message);
+      break;
     case 'MAP_ERROR':
       handlers?.onMapError?.(message.message);
       break;
@@ -612,6 +753,18 @@ export function handleBridgeMessage(
       }
       break;
     }
+    case 'OPEN_VISITED_PLACE_SHEET':
+      handlers?.onOpenVisitedPlaceSheet?.(message);
+      break;
+    case 'CLOSE_VISITED_PLACE_SHEET':
+      handlers?.onCloseVisitedPlaceSheet?.();
+      break;
+    case 'OPEN_NATIVE_PHOTO_VIEWER':
+      handlers?.onOpenNativePhotoViewer?.(message);
+      break;
+    case 'CLOSE_NATIVE_PHOTO_VIEWER':
+      handlers?.onCloseNativePhotoViewer?.();
+      break;
     default:
       break;
   }

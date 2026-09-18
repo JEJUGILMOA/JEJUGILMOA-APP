@@ -2,10 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Dimensions,
-  Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +15,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapTokens, planDayColor } from '../../constants/map';
 import type { ActiveTripStop } from '../../data/mapDummy';
+import {
+  buildExternalDirectionsUrls,
+  openExternalMapUrls,
+} from '../../utils/openExternalMap';
 import { CategoryIcon, CheckIcon } from './MapIcons';
 
 type Props = {
@@ -143,16 +145,10 @@ export default function ActiveTripSheet({
       return;
     }
     const { latitude, longitude, name } = activeStop.place;
-    const label = encodeURIComponent(name);
-    const webUrl = `https://map.naver.com/v5/search/${label}`;
-    const appUrl =
-      Platform.OS === 'ios'
-        ? `maps://?daddr=${latitude},${longitude}&dirflg=d`
-        : `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`;
-    try {
-      const canOpenApp = await Linking.canOpenURL(appUrl);
-      await Linking.openURL(canOpenApp ? appUrl : webUrl);
-    } catch {
+    const opened = await openExternalMapUrls(
+      buildExternalDirectionsUrls({ latitude, longitude, name }),
+    );
+    if (!opened) {
       Alert.alert('길찾기', '지도 앱을 열 수 없어요.');
     }
   }, [activeStop]);

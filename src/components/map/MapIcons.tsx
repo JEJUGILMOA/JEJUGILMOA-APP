@@ -366,7 +366,11 @@ export function MountainIcon({ color, size = 20 }: IconProps): React.JSX.Element
 }
 
 /** Lucide: star */
-export function StarIcon({ color, size = 16 }: IconProps): React.JSX.Element {
+export function StarIcon({
+  color,
+  size = 16,
+  filled = false,
+}: IconProps & { filled?: boolean }): React.JSX.Element {
   return (
     <BaseSvg size={size}>
       <Path
@@ -375,6 +379,7 @@ export function StarIcon({ color, size = 16 }: IconProps): React.JSX.Element {
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
+        fill={filled ? color : 'none'}
       />
     </BaseSvg>
   );

@@ -111,13 +111,15 @@ export function formatPlanDDay(dDay: number): string {
 }
 
 export function planStatusLabel(
-  status: 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED',
+  status: 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED',
 ): string {
   switch (status) {
     case 'IN_PROGRESS':
       return '진행중';
     case 'COMPLETED':
       return '완료';
+    case 'CANCELLED':
+      return '취소됨';
     default:
       return '임시저장';
   }

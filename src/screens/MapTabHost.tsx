@@ -9,6 +9,12 @@ import {
   setTripCompleteFromWeb,
   setTripVisitResultFromWeb,
 } from '../bridge/mapDataStore';
+import {
+  setMapFavoriteIdsFromWeb,
+  setMapFavoriteToggleFromWeb,
+  setMapPlaceDetailFromWeb,
+  setMapPlaceSearchFromWeb,
+} from '../bridge/placeSheetStore';
 import { setPlanListFromWeb } from '../bridge/planListStore';
 import {
   handleBridgeMessage,
@@ -127,6 +133,18 @@ export default function MapTabHost(): React.JSX.Element {
           endDate: message.endDate,
           earnedBadges: message.earnedBadges ?? [],
         });
+      },
+      onMapPlaceDetail: (message) => {
+        setMapPlaceDetailFromWeb(message);
+      },
+      onMapPlaceSearchResults: (message) => {
+        setMapPlaceSearchFromWeb(message);
+      },
+      onMapFavoritePlaceIds: (message) => {
+        setMapFavoriteIdsFromWeb(message.placeIds, message.error);
+      },
+      onMapPlaceFavoriteResult: (message) => {
+        setMapFavoriteToggleFromWeb(message);
       },
       onMapError: (message) => {
         // console.warn('[map-bridge]', message);

@@ -39,11 +39,16 @@ import ItineraryNativeSheet, {
   ItinerarySheetExpandChip,
   type ItinerarySheetRef,
 } from '../components/map/ItineraryNativeSheet';
+import VisitedPlaceNativeSheet, {
+  type VisitedPlaceSheetPlace,
+} from '../components/map/VisitedPlaceNativeSheet';
+import NativePhotoViewer from '../components/map/NativePhotoViewer';
 import PlanItineraryMap from '../components/map/PlanItineraryMap';
 import PageHeader from '../components/PageHeader';
 import WebDialog, { HIDDEN_WEB_DIALOG } from '../components/WebDialog';
 import WebToast, { HIDDEN_NATIVE_TOAST } from '../components/WebToast';
 import { WEB_BASE_URL } from '../constants/config';
+import { MapTokens } from '../constants/map';
 import { TabBarTokens } from '../constants/tabs';
 import { useAuth } from '../context/AuthContext';
 import { takePendingNativeToast } from '../nativeToastQueue';
@@ -51,7 +56,21 @@ import { setPendingMapMode } from '../pendingMapMode';
 import { setPendingWebPath, takePendingWebPath, subscribeForceTabWebPath } from '../pendingWebPath';
 import { useTabRepress } from '../hooks/useTabRepress';
 import type { MapBounds } from '../api/map';
-import { JEJU_DEFAULT_BOUNDS } from '../utils/mapBounds';
+import {
+  JEJU_DEFAULT_BOUNDS,
+  roundBounds,
+  shrinkBounds,
+} from '../utils/mapBounds';
+
+/** 일반 지도와 동일 — 화면 가운데 약 55% 영역으로 검색 */
+const SEARCH_BOUNDS_RATIO = 0.55;
+/** Day 페이저(높이 40) 바로 아래 — paddingTop(inset+8) + row(40) + gap(8) */
+const ITINERARY_DAY_PAGER_ROW = 40;
+const ITINERARY_SEARCH_HERE_GAP = 8;
+
+function toSearchArea(bounds: MapBounds): MapBounds {
+  return roundBounds(shrinkBounds(bounds, SEARCH_BOUNDS_RATIO));
+}
 
 type Props = {
   /** 웹앱 내 경로. 예: '/', '/plan', '/record', '/my', '/login' */
@@ -115,10 +134,27 @@ export default function WebViewScreen({ path, tabName }: Props) {
   const [zoomPulse, setZoomPulse] = useState({ seq: 0, delta: 0 });
   const [webDialog, setWebDialog] = useState(HIDDEN_WEB_DIALOG);
   const [webToast, setWebToast] = useState(HIDDEN_NATIVE_TOAST);
+  const [visitedPlaceSheet, setVisitedPlaceSheet] =
+    useState<VisitedPlaceSheetPlace | null>(null);
+  const [photoViewer, setPhotoViewer] = useState<{
+    photoUrls: string[];
+    initialIndex: number;
+  } | null>(null);
   const [itineraryChrome, setItineraryChrome] =
     useState<PlanItineraryChromeState>(HIDDEN_ITINERARY_CHROME);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const lastMapBoundsRef = useRef<MapBounds>(JEJU_DEFAULT_BOUNDS);
+  const [itineraryViewBounds, setItineraryViewBounds] =
+    useState<MapBounds>(JEJU_DEFAULT_BOUNDS);
+  /** 로그인 후 탭 루트 로드 뒤 push할 경로 */
+  const pendingPushPathRef = useRef<string | null>(null);
+
+  const flushPendingPushPath = useCallback(() => {
+    const pushPath = pendingPushPathRef.current;
+    if (!pushPath) return;
+    pendingPushPathRef.current = null;
+    sendToWeb(webviewRef.current, { type: 'NAVIGATE_WEB_PATH', path: pushPath });
+  }, []);
 
   useEffect(() => {
     setActivePath(path);
@@ -149,15 +185,25 @@ export default function WebViewScreen({ path, tabName }: Props) {
       if (pendingToast) setWebToast(pendingToast);
 
       if (!tabName) return;
-      const pendingPath = takePendingWebPath(tabName);
-      if (pendingPath) {
-        setActivePath(pendingPath);
-        setHeader(HIDDEN_HEADER);
-        setPlanMap(HIDDEN_MAP);
-        setItineraryChrome(HIDDEN_ITINERARY_CHROME);
-        setSheetCollapsed(false);
-      }
-    }, [tabName]),
+      const pending = takePendingWebPath(tabName);
+      if (!pending) return;
+
+      pendingPushPathRef.current = pending.pushPath ?? null;
+      const nextPath = pending.path;
+      // activePath를 deps에 넣지 않음 — setActivePath 후 effect가 다시 돌며 push ref를 잃는 것 방지
+      setActivePath((current) => {
+        if (nextPath === current) {
+          // 이미 탭 루트면 remount 없이 바로 push (마이크로태스크로 ref 세팅 이후)
+          queueMicrotask(() => flushPendingPushPath());
+          return current;
+        }
+        return nextPath;
+      });
+      setHeader(HIDDEN_HEADER);
+      setPlanMap(HIDDEN_MAP);
+      setItineraryChrome(HIDDEN_ITINERARY_CHROME);
+      setSheetCollapsed(false);
+    }, [tabName, flushPendingPushPath]),
   );
 
   // 이미 포커스된 탭에도 강제 경로 적용 (로그아웃 후 /my 복귀 등)
@@ -166,6 +212,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
     return subscribeForceTabWebPath((name, nextPath) => {
       if (name !== tabName) return;
       takePendingWebPath(tabName);
+      pendingPushPathRef.current = null;
       setActivePath(nextPath);
       setHeader(HIDDEN_HEADER);
       setPlanMap(HIDDEN_MAP);
@@ -238,6 +285,7 @@ export default function WebViewScreen({ path, tabName }: Props) {
           isSelectingDeparture: message.isSelectingDeparture ?? prev.isSelectingDeparture,
           nextLabel: message.nextLabel ?? prev.nextLabel,
           sheetTitle: message.sheetTitle ?? prev.sheetTitle,
+          showSearchHere: message.showSearchHere ?? prev.showSearchHere,
         }));
       },
       onRequestAppleLogin: () => {
@@ -291,6 +339,8 @@ export default function WebViewScreen({ path, tabName }: Props) {
       },
       onWebReady: () => {
         injectStoredWebAuthToWeb(webviewRef.current, getStoredWebAuth());
+        // 로그인 후 탭 루트 로드가 끝난 뒤 returnTo로 push
+        flushPendingPushPath();
       },
       onNavigateToMap: (payload) => {
         const mode = payload?.mode;
@@ -339,8 +389,24 @@ export default function WebViewScreen({ path, tabName }: Props) {
           });
         })();
       },
+      onOpenVisitedPlaceSheet: (message) => {
+        setVisitedPlaceSheet(message.place);
+      },
+      onCloseVisitedPlaceSheet: () => {
+        setVisitedPlaceSheet(null);
+      },
+      onOpenNativePhotoViewer: (message) => {
+        if (!message.photoUrls?.length) return;
+        setPhotoViewer({
+          photoUrls: message.photoUrls,
+          initialIndex: message.initialIndex ?? 0,
+        });
+      },
+      onCloseNativePhotoViewer: () => {
+        setPhotoViewer(null);
+      },
     });
-  }, [signIn, signOut]);
+  }, [signIn, signOut, flushPendingPushPath]);
 
   const onLoadEnd = useCallback(() => {
     sendToWeb(webviewRef.current, {
@@ -383,7 +449,10 @@ export default function WebViewScreen({ path, tabName }: Props) {
   );
 
   const onBack = useCallback(() => {
-    if (path === '/login' || activePath === '/login') {
+    // `/login?returnTo=...` 도 로그인 스택 — 네이티브 화면을 pop
+    const pathOnly = path.split('?')[0];
+    const activeOnly = activePath.split('?')[0];
+    if (pathOnly === '/login' || activeOnly === '/login') {
       if (router.canGoBack()) {
         router.back();
       }
@@ -406,11 +475,28 @@ export default function WebViewScreen({ path, tabName }: Props) {
 
   const onMapRegionChanged = useCallback((bounds: MapBounds) => {
     lastMapBoundsRef.current = bounds;
+    setItineraryViewBounds(bounds);
     sendToWeb(webviewRef.current, {
       type: 'MAP_REGION_CHANGED',
       ...bounds,
     });
   }, []);
+
+  const itineraryLiveSearchArea = useMemo(
+    () => toSearchArea(itineraryViewBounds),
+    [itineraryViewBounds],
+  );
+
+  const handleItinerarySearchHere = useCallback(() => {
+    sendToWeb(webviewRef.current, {
+      type: 'ITINERARY_SEARCH_HERE',
+      ...itineraryLiveSearchArea,
+    });
+  }, [itineraryLiveSearchArea]);
+
+  // Day N · 날짜 페이저 바로 아래 (시트 위치가 아니라 상단 크롬 기준)
+  const itinerarySearchHereTop =
+    insets.top + 8 + ITINERARY_DAY_PAGER_ROW + ITINERARY_SEARCH_HERE_GAP;
 
   const onModalAction = useCallback((id: string) => {
     sendToWeb(webviewRef.current, { type: 'MODAL_ACTION', id });
@@ -450,6 +536,12 @@ export default function WebViewScreen({ path, tabName }: Props) {
   }, []);
 
   const itineraryMode = planMap.visible;
+
+  // 장소 추가 탭이면 바로 표시(일반 지도처럼 '이동 후' 조건이면 시트가 지도를 가려 버튼을 못 봄)
+  const showItinerarySearchHere =
+    itineraryMode &&
+    itineraryChrome.showSearchHere &&
+    !itineraryChrome.searchQuery.trim();
 
   useEffect(() => {
     isItinerarySV.value = itineraryMode ? 1 : 0;
@@ -601,6 +693,21 @@ export default function WebViewScreen({ path, tabName }: Props) {
           onDepartureCancel={onItineraryDepartureCancel}
         />
       ) : null}
+      {showItinerarySearchHere ? (
+        <View
+          style={[styles.searchHereWrap, { top: itinerarySearchHereTop }]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            style={styles.searchHereButton}
+            onPress={handleItinerarySearchHere}
+            accessibilityRole="button"
+            accessibilityLabel="현 위치에서 검색"
+          >
+            <Text style={styles.searchHereLabel}>현 위치에서 검색</Text>
+          </Pressable>
+        </View>
+      ) : null}
       <ItinerarySheetExpandChip
         visible={itineraryMode && sheetCollapsed}
         onPress={() => itinerarySheetRef.current?.snapToIndex(DEFAULT_OPEN_SNAP_INDEX)}
@@ -615,6 +722,16 @@ export default function WebViewScreen({ path, tabName }: Props) {
         dialog={webDialog}
         onAction={onModalAction}
         onDismiss={onModalDismiss}
+      />
+      <VisitedPlaceNativeSheet
+        place={visitedPlaceSheet}
+        onClose={() => setVisitedPlaceSheet(null)}
+      />
+      <NativePhotoViewer
+        visible={photoViewer != null}
+        photoUrls={photoViewer?.photoUrls ?? []}
+        initialIndex={photoViewer?.initialIndex ?? 0}
+        onClose={() => setPhotoViewer(null)}
       />
     </View>
   );
@@ -688,5 +805,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#fff',
+  },
+  searchHereWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 40,
+    elevation: 40,
+    alignItems: 'center',
+  },
+  searchHereButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: MapTokens.surface,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
+  searchHereLabel: {
+    color: MapTokens.text,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
 });

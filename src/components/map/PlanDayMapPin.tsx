@@ -76,15 +76,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 2.5,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 3,
   },
   pinSelected: {
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    // 선택 강조는 크기만 — 마커 스냅샷에서 shadow가 검은 테두리로 보임
   },
 });

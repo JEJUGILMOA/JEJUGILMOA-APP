@@ -1,5 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Alert, Image, Linking, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import MapText from './MapText';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,38 +17,130 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CATEGORY_LABELS, MapTokens } from '../../constants/map';
 import type { Place } from '../../types/map';
 import {
-  CategoryIcon,
-  ChevronDownIcon,
   ClockIcon,
   PhoneIcon,
   StarIcon,
 } from './MapIcons';
+import NativePhotoViewer from './NativePhotoViewer';
 
 type Props = {
   place: Place | null;
+  /** 상세 API 응답 대기 중 — 스켈레톤 표시 */
+  loading?: boolean;
   onClose: () => void;
-  onAddToCourse: (place: Place) => void;
+  onToggleFavorite: (place: Place) => void;
   onSetDestination: (place: Place) => void;
 };
+
+const PHOTO_WIDTH = Math.min(Dimensions.get('window').width * 0.72, 260);
+
+function resolvePhotoUrls(place: Place): string[] {
+  if (place.imageUrls && place.imageUrls.length > 0) return place.imageUrls;
+  if (place.imageUrl) return [place.imageUrl];
+  return [];
+}
+
+function SkeletonBone({
+  width,
+  height,
+  radius = 8,
+  style,
+  pulse,
+}: {
+  width: number | `${number}%`;
+  height: number;
+  radius?: number;
+  style?: object;
+  pulse: Animated.Value;
+}) {
+  return (
+    <Animated.View
+      style={[
+        {
+          width,
+          height,
+          borderRadius: radius,
+          backgroundColor: '#E8EBF0',
+          opacity: pulse,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+function PlaceDetailSkeleton({ pulse }: { pulse: Animated.Value }) {
+  return (
+    <View style={styles.skeletonRoot} accessibilityLabel="장소 정보 불러오는 중">
+      <SkeletonBone width="62%" height={26} radius={8} pulse={pulse} />
+      <SkeletonBone width="28%" height={14} radius={6} pulse={pulse} style={{ marginTop: 2 }} />
+
+      <View style={styles.actions}>
+        <View style={styles.skeletonActionSlot}>
+          <SkeletonBone width="100%" height={48} radius={12} pulse={pulse} />
+        </View>
+        <View style={styles.skeletonActionSlot}>
+          <SkeletonBone width="100%" height={48} radius={12} pulse={pulse} />
+        </View>
+      </View>
+
+      <View style={styles.detailSection}>
+        <SkeletonBone width="100%" height={148} radius={14} pulse={pulse} />
+        <SkeletonBone width="88%" height={14} radius={6} pulse={pulse} />
+        <SkeletonBone width="55%" height={14} radius={6} pulse={pulse} />
+        <SkeletonBone width="100%" height={72} radius={12} pulse={pulse} style={{ marginTop: 4 }} />
+      </View>
+    </View>
+  );
+}
 
 /** MAP-06: 장소 상세 시트 — 검은 배경(scrim) 없음 */
 export default function PlaceDetailSheet({
   place,
+  loading = false,
   onClose,
-  onAddToCourse,
+  onToggleFavorite,
   onSetDestination,
 }: Props): React.JSX.Element | null {
   const sheetRef = useRef<BottomSheet>(null);
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['56%'], []);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const pulse = useRef(new Animated.Value(0.45)).current;
+
+  useEffect(() => {
+    if (!loading) {
+      pulse.setValue(0.45);
+      return;
+    }
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.45,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [loading, pulse]);
 
   useEffect(() => {
     if (place) {
       sheetRef.current?.expand();
+      setViewerIndex(null);
     } else {
       sheetRef.current?.close();
+      setViewerIndex(null);
     }
-  }, [place]);
+    // place 객체(즐겨찾기 등) 갱신 시 expand를 다시 호출하면 시트가 위로 점프함 → id만 추적
+  }, [place?.id]);
 
   const handleChange = useCallback(
     (index: number) => {
@@ -66,118 +168,147 @@ export default function PlaceDetailSheet({
   }
 
   const categoryLabel = CATEGORY_LABELS[place.category];
-  const photoLabel = `1/${place.photoCount ?? 1}`;
+  const photoUrls = resolvePhotoUrls(place);
+  const hasPhotos = photoUrls.length > 0;
 
   return (
-    <BottomSheet
-      ref={sheetRef}
-      index={0}
-      snapPoints={snapPoints}
-      enablePanDownToClose
-      onChange={handleChange}
-      onClose={onClose}
-      backgroundStyle={styles.sheetBg}
-      handleIndicatorStyle={styles.handle}
-      style={styles.sheet}
-      containerStyle={styles.container}
-    >
-      <BottomSheetScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: Math.max(insets.bottom, 12) + 8 },
-        ]}
-        showsVerticalScrollIndicator={false}
+    <>
+      <BottomSheet
+        ref={sheetRef}
+        index={0}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        onChange={handleChange}
+        onClose={onClose}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.handle}
+        style={styles.sheet}
+        containerStyle={styles.container}
       >
-        {/* 1. 제목 */}
-        <View style={styles.titleRow}>
-          <MapText style={styles.name} numberOfLines={1}>
-            {place.name}
-          </MapText>
-          {place.rating != null ? (
-            <View style={styles.ratingRow}>
-              <StarIcon color={MapTokens.amber} size={14} />
-              <MapText style={styles.rating}>{place.rating.toFixed(1)}</MapText>
-            </View>
-          ) : null}
-        </View>
-
-        {/* 2. 카테고리 */}
-        <MapText style={styles.category}>{categoryLabel}</MapText>
-
-        {/* 3. 버튼 */}
-        <View style={styles.actions}>
-          <Pressable
-            style={styles.secondaryBtn}
-            onPress={() => onSetDestination(place)}
-            accessibilityRole="button"
-            accessibilityLabel="목적지로 설정"
-          >
-            <MapText style={styles.secondaryBtnText}>목적지로 설정</MapText>
-          </Pressable>
-          <Pressable
-            style={styles.primaryBtn}
-            onPress={() => onAddToCourse(place)}
-            accessibilityRole="button"
-            accessibilityLabel="코스에 추가"
-          >
-            <MapText style={styles.primaryBtnText}>+ 코스에 추가</MapText>
-          </Pressable>
-        </View>
-
-        {/* 4. 상세 정보 */}
-        <View style={styles.detailSection}>
-          <View style={styles.hero}>
-            {place.imageUrl ? (
-              <Image source={{ uri: place.imageUrl }} style={styles.heroImage} />
-            ) : (
-              <View style={styles.heroPlaceholder}>
-                <CategoryIcon
-                  category={place.isFavorite ? 'favorite' : place.category}
-                  color={MapTokens.green}
-                  size={40}
-                />
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: Math.max(insets.bottom, 12) + 8 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {loading ? (
+            <PlaceDetailSkeleton pulse={pulse} />
+          ) : (
+            <>
+              <View style={styles.titleRow}>
+                <MapText style={styles.name} numberOfLines={1}>
+                  {place.name}
+                </MapText>
+                {place.rating != null ? (
+                  <View style={styles.ratingRow}>
+                    <StarIcon color={MapTokens.amber} size={14} />
+                    <MapText style={styles.rating}>{place.rating.toFixed(1)}</MapText>
+                  </View>
+                ) : null}
               </View>
-            )}
-            <View style={styles.photoBadge}>
-              <MapText style={styles.photoBadgeText}>{photoLabel}</MapText>
-            </View>
-          </View>
 
-          {place.address ? (
-            <MapText style={styles.address} numberOfLines={2}>
-              {place.address}
-            </MapText>
-          ) : null}
+              <MapText style={styles.category}>{categoryLabel}</MapText>
 
-          <View style={styles.infoBlock}>
-            {place.hoursLabel ? (
-              <View style={styles.infoRow}>
-                <ClockIcon color={MapTokens.textMuted} size={15} />
-                <MapText style={styles.infoText}>{place.hoursLabel}</MapText>
+              <View style={styles.actions}>
+                <Pressable
+                  style={styles.secondaryBtn}
+                  onPress={() => onSetDestination(place)}
+                  accessibilityRole="button"
+                  accessibilityLabel="길찾기"
+                >
+                  <MapText style={styles.secondaryBtnText}>길찾기</MapText>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.favoriteBtn,
+                    place.isFavorite ? styles.favoriteBtnActive : null,
+                  ]}
+                  onPress={() => onToggleFavorite(place)}
+                  accessibilityRole="button"
+                  accessibilityLabel={place.isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+                >
+                  <StarIcon
+                    color={place.isFavorite ? MapTokens.amber : MapTokens.text}
+                    filled={Boolean(place.isFavorite)}
+                    size={16}
+                  />
+                  <MapText style={styles.favoriteBtnText}>
+                    {place.isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+                  </MapText>
+                </Pressable>
               </View>
-            ) : null}
-            {place.phone ? (
-              <Pressable style={styles.infoRow} onPress={handleCall}>
-                <PhoneIcon color={MapTokens.textMuted} size={15} />
-                <MapText style={[styles.infoText, styles.phoneText]}>{place.phone}</MapText>
-              </Pressable>
-            ) : null}
-            <View style={styles.expandHint}>
-              <ChevronDownIcon color={MapTokens.textMuted} size={16} />
-            </View>
-          </View>
 
-          {place.description ? (
-            <View style={styles.descBox}>
-              <MapText style={styles.desc} numberOfLines={3}>
-                {place.description}
-              </MapText>
-              <ChevronDownIcon color={MapTokens.textMuted} size={16} />
-            </View>
-          ) : null}
-        </View>
-      </BottomSheetScrollView>
-    </BottomSheet>
+              <View style={styles.detailSection}>
+                {hasPhotos ? (
+                  <ScrollView
+                    key={place.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.photoRow}
+                  >
+                    {photoUrls.map((url, index) => (
+                      <Pressable
+                        key={`${place.id}-${url}-${index}`}
+                        style={styles.photoCard}
+                        onPress={() => setViewerIndex(index)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${place.name} 사진 ${index + 1} 크게 보기`}
+                      >
+                        <Image source={{ uri: url }} style={styles.photoImage} />
+                        <View style={styles.photoBadge}>
+                          <MapText style={styles.photoBadgeText}>
+                            {index + 1}/{photoUrls.length}
+                          </MapText>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.heroPlaceholder}>
+                    <MapText style={styles.heroPlaceholderText}>이미지가 없어요</MapText>
+                  </View>
+                )}
+
+                {place.address ? (
+                  <MapText style={styles.address} numberOfLines={2}>
+                    {place.address}
+                  </MapText>
+                ) : null}
+
+                <View style={styles.infoBlock}>
+                  {place.hoursLabel ? (
+                    <View style={styles.infoRow}>
+                      <ClockIcon color={MapTokens.textMuted} size={15} />
+                      <MapText style={styles.infoText}>{place.hoursLabel}</MapText>
+                    </View>
+                  ) : null}
+                  {place.phone ? (
+                    <Pressable style={styles.infoRow} onPress={handleCall}>
+                      <PhoneIcon color={MapTokens.textMuted} size={15} />
+                      <MapText style={[styles.infoText, styles.phoneText]}>{place.phone}</MapText>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {place.description ? (
+                  <View style={styles.descBox}>
+                    <MapText style={styles.desc}>{place.description}</MapText>
+                  </View>
+                ) : null}
+              </View>
+            </>
+          )}
+        </BottomSheetScrollView>
+      </BottomSheet>
+
+      <NativePhotoViewer
+        visible={viewerIndex != null}
+        photoUrls={photoUrls}
+        initialIndex={viewerIndex ?? 0}
+        onClose={() => setViewerIndex(null)}
+      />
+    </>
   );
 }
 
@@ -202,6 +333,10 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     gap: 10,
+  },
+  skeletonRoot: {
+    gap: 10,
+    marginTop: 2,
   },
   titleRow: {
     flexDirection: 'row',
@@ -237,6 +372,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 4,
   },
+  skeletonActionSlot: {
+    flex: 1,
+  },
   secondaryBtn: {
     flex: 1,
     height: 48,
@@ -252,18 +390,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: MapTokens.text,
   },
-  primaryBtn: {
+  favoriteBtn: {
     flex: 1.15,
     height: 48,
     borderRadius: 12,
-    backgroundColor: MapTokens.green,
+    borderWidth: 1,
+    borderColor: MapTokens.border,
+    backgroundColor: MapTokens.surface,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
   },
-  primaryBtnText: {
+  favoriteBtnActive: {
+    borderColor: MapTokens.amber,
+    backgroundColor: MapTokens.amberSoft,
+  },
+  favoriteBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: MapTokens.text,
   },
   detailSection: {
     gap: 10,
@@ -271,20 +417,32 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: MapTokens.border,
   },
-  hero: {
+  photoRow: {
+    gap: 10,
+    paddingVertical: 2,
+  },
+  photoCard: {
+    width: PHOTO_WIDTH,
     height: 148,
     borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: MapTokens.greenSoft,
   },
-  heroImage: {
+  photoImage: {
     width: '100%',
     height: '100%',
   },
   heroPlaceholder: {
-    flex: 1,
+    height: 148,
+    borderRadius: 14,
+    backgroundColor: MapTokens.greenSoft,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  heroPlaceholderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: MapTokens.textMuted,
   },
   photoBadge: {
     position: 'absolute',
@@ -307,8 +465,6 @@ const styles = StyleSheet.create({
   infoBlock: {
     marginTop: 2,
     gap: 8,
-    position: 'relative',
-    paddingRight: 24,
   },
   infoRow: {
     flexDirection: 'row',
@@ -323,22 +479,13 @@ const styles = StyleSheet.create({
   phoneText: {
     color: MapTokens.blue,
   },
-  expandHint: {
-    position: 'absolute',
-    right: 0,
-    top: 4,
-  },
   descBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
     backgroundColor: MapTokens.background,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   desc: {
-    flex: 1,
     fontSize: 13,
     lineHeight: 19,
     color: MapTokens.textMuted,

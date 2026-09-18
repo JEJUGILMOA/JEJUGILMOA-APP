@@ -12,6 +12,8 @@ export type Place = {
   isFavorite?: boolean;
   /** 대표 이미지 (없으면 플레이스홀더) */
   imageUrl?: string;
+  /** 상세 사진 목록 (바텀시트 캐러셀) */
+  imageUrls?: string[];
   photoCount?: number;
   /** 예: "영업 중 07:00 - 20:00" */
   hoursLabel?: string;

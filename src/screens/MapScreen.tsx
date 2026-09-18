@@ -7,7 +7,8 @@ import {
 } from '@mj-studio/react-native-naver-map';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Linking, Platform, Share, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchMapHeatmap, fetchMapPlaces, type MapBounds } from '../api/map';
@@ -23,6 +24,13 @@ import {
   subscribeMapPlanDetail,
   subscribeMapTrip,
 } from '../bridge/mapDataStore';
+import {
+  type MapPlaceSearchHit,
+  subscribeMapFavoriteIds,
+  subscribeMapFavoriteToggle,
+  subscribeMapPlaceDetail,
+  subscribeMapPlaceSearch,
+} from '../bridge/placeSheetStore';
 import {
   markPlanListLoading,
   subscribePlanList,
@@ -82,7 +90,9 @@ import {
 import { setPendingWebPath } from '../pendingWebPath';
 import type { HeatZone, Place, PlanTravelLeg, PlanWaypoint } from '../types/map';
 import { getDeviceCoordinates } from '../utils/deviceLocation';
+import { ensureMapLocationPermission } from '../utils/mapLocationPermission';
 import {
+  boundsAroundPoint,
   boundsEqual,
   boundsFromRegion,
   boundsKey,
@@ -90,7 +100,10 @@ import {
   roundBounds,
   shrinkBounds,
 } from '../utils/mapBounds';
-import { ensureMapLocationPermission } from '../utils/mapLocationPermission';
+import {
+  buildExternalDirectionsUrls,
+  openExternalMapUrls,
+} from '../utils/openExternalMap';
 import {
   categoryFromApiName, mapHeatmapDtoToZone,
   mapPlaceDtoToPlace,
@@ -160,8 +173,16 @@ export default function MapScreen(): React.JSX.Element {
   const [mapRefreshKey, setMapRefreshKey] = useState(0);
   const [category, setCategory] = useState<PlaceCategory>('all');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  /** 장소 상세(MAP_PLACE_DETAIL) 수신 전 바텀시트 스켈레톤 */
+  const [placeDetailLoading, setPlaceDetailLoading] = useState(false);
   const [modeSheetOpen, setModeSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [placeSearchResults, setPlaceSearchResults] = useState<MapPlaceSearchHit[]>(
+    [],
+  );
+  const [placeSearching, setPlaceSearching] = useState(false);
+  const [placeSearchError, setPlaceSearchError] = useState<string | null>(null);
+  const pendingSelectFromSearchRef = useRef<string | null>(null);
 
   // 웹에서 NAVIGATE_TO_MAP(mode)로 넘어온 경우 포커스 시 모드 적용
   useFocusEffect(
@@ -279,8 +300,170 @@ export default function MapScreen(): React.JSX.Element {
   const [heatZones, setHeatZones] = useState<HeatZone[]>([]);
   const placesRequestKeyRef = useRef<string>('');
   const heatmapRequestKeyRef = useRef<string>('');
+  const favoriteIdsRef = useRef<Set<string>>(new Set());
+  const selectedPlaceRef = useRef<Place | null>(null);
+  selectedPlaceRef.current = selectedPlace;
 
   const liveSearchArea = useMemo(() => toSearchArea(viewBounds), [viewBounds]);
+
+  // 로그인 시 즐겨찾기 ID 동기화 (쿠키 API → 숨은 WebView)
+  useEffect(() => {
+    if (!isAuthenticated) {
+      favoriteIdsRef.current = new Set();
+      setMapPlaces((prev) =>
+        prev.map((place) =>
+          place.isFavorite ? { ...place, isFavorite: false } : place,
+        ),
+      );
+      return;
+    }
+    broadcastToWeb({ type: 'REQUEST_FAVORITE_PLACE_IDS' });
+  }, [isAuthenticated, mapRefreshKey]);
+
+  useEffect(() => {
+    return subscribeMapFavoriteIds((next) => {
+      const ids = new Set(next.placeIds);
+      favoriteIdsRef.current = ids;
+      setMapPlaces((prev) =>
+        prev.map((place) => {
+          const isFavorite = ids.has(place.id);
+          return place.isFavorite === isFavorite
+            ? place
+            : { ...place, isFavorite };
+        }),
+      );
+      setSelectedPlace((prev) => {
+        if (!prev) return prev;
+        const isFavorite = ids.has(prev.id);
+        return prev.isFavorite === isFavorite ? prev : { ...prev, isFavorite };
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    return subscribeMapPlaceSearch((next) => {
+      if (!next) return;
+      setPlaceSearching(false);
+      setPlaceSearchResults(next.places);
+      setPlaceSearchError(next.error ?? null);
+    });
+  }, []);
+
+  useEffect(() => {
+    return subscribeMapPlaceDetail((next) => {
+      if (!next) return;
+      if (next.error) {
+        if (pendingSelectFromSearchRef.current === next.placeId) {
+          pendingSelectFromSearchRef.current = null;
+          Alert.alert('장소', next.error);
+        }
+        if (selectedPlaceRef.current?.id === next.placeId) {
+          setPlaceDetailLoading(false);
+        }
+        return;
+      }
+
+      const lat = next.latitude;
+      const lng = next.longitude;
+      const fromSearch = pendingSelectFromSearchRef.current === next.placeId;
+
+      if (fromSearch) {
+        pendingSelectFromSearchRef.current = null;
+        if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+          Alert.alert('장소', '이 장소의 좌표 정보가 없어요.');
+          return;
+        }
+        const place: Place = {
+          id: next.placeId,
+          name: next.name ?? '장소',
+          latitude: lat,
+          longitude: lng,
+          category: categoryFromApiName(next.categoryName),
+          address: next.address,
+          description: next.description,
+          imageUrl: next.imageUrl,
+          imageUrls: next.imageUrls,
+          photoCount: next.photoCount,
+          phone: next.phone,
+          isFavorite: favoriteIdsRef.current.has(next.placeId),
+        };
+        setMode((prev) => (prev === 'heatmap' ? 'heatmap' : 'general'));
+        setCategory('all');
+        setSearchBounds(boundsAroundPoint(lat, lng));
+        // 바텀시트에 가리지 않도록 카메라 중심을 남쪽으로 (핀은 화면 위쪽)
+        const zoom = 14;
+        const latBias = 0.012 * Math.pow(2, 13 - zoom);
+        mapRef.current?.animateCameraTo({
+          latitude: lat - latBias,
+          longitude: lng,
+          zoom,
+          duration: 500,
+        });
+        setMapPlaces((prev) => {
+          const without = prev.filter((p) => p.id !== place.id);
+          return [place, ...without];
+        });
+        setSelectedPlace(place);
+        setSelectedPlanId(place.id);
+        setPlaceDetailLoading(false);
+        return;
+      }
+
+      setSelectedPlace((prev) => {
+        if (!prev || prev.id !== next.placeId) return prev;
+        // 상세 응답의 이미지를 기준으로 덮어씀 (없으면 이전 장소 잔상 제거)
+        const imageUrls =
+          next.imageUrls && next.imageUrls.length > 0
+            ? next.imageUrls
+            : next.imageUrl
+              ? [next.imageUrl]
+              : [];
+        return {
+          ...prev,
+          name: next.name ?? prev.name,
+          address: next.address ?? prev.address,
+          description: next.description ?? prev.description,
+          imageUrl: imageUrls[0],
+          imageUrls,
+          photoCount: next.photoCount ?? imageUrls.length,
+          phone: next.phone ?? prev.phone,
+          latitude: lat ?? prev.latitude,
+          longitude: lng ?? prev.longitude,
+          category: next.categoryName
+            ? categoryFromApiName(next.categoryName)
+            : prev.category,
+        };
+      });
+      if (selectedPlaceRef.current?.id === next.placeId) {
+        setPlaceDetailLoading(false);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    return subscribeMapFavoriteToggle((next) => {
+      if (next.isFavorite) {
+        favoriteIdsRef.current.add(next.placeId);
+      } else {
+        favoriteIdsRef.current.delete(next.placeId);
+      }
+      setSelectedPlace((prev) =>
+        prev && prev.id === next.placeId
+          ? { ...prev, isFavorite: next.isFavorite }
+          : prev,
+      );
+      setMapPlaces((prev) =>
+        prev.map((place) =>
+          place.id === next.placeId
+            ? { ...place, isFavorite: next.isFavorite }
+            : place,
+        ),
+      );
+      if (next.error) {
+        Alert.alert('즐겨찾기', next.error);
+      }
+    });
+  }, []);
 
   // 최초 1회: 현재 영역으로 검색 시작
   useEffect(() => {
@@ -320,13 +503,29 @@ export default function MapScreen(): React.JSX.Element {
         );
         if (placesRequestKeyRef.current !== requestKey) return;
         setMapPlaces((prev) => {
-          const favoriteIds = new Set(prev.filter((p) => p.isFavorite).map((p) => p.id));
-          return rows.map((row) => {
+          const favoriteIds = favoriteIdsRef.current;
+          const merged = new Set([
+            ...favoriteIds,
+            ...prev.filter((p) => p.isFavorite).map((p) => p.id),
+          ]);
+          const mapped = rows.map((row) => {
             const place = mapPlaceDtoToPlace(row);
-            return favoriteIds.has(place.id)
+            return merged.has(place.id)
               ? { ...place, isFavorite: true }
               : place;
           });
+          // 검색으로 고른 핀이 영역 응답에 없어도 유지
+          const selected = selectedPlaceRef.current;
+          if (selected && !mapped.some((p) => p.id === selected.id)) {
+            return [
+              {
+                ...selected,
+                isFavorite: merged.has(selected.id) || selected.isFavorite,
+              },
+              ...mapped,
+            ];
+          }
+          return mapped;
         });
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -444,14 +643,27 @@ export default function MapScreen(): React.JSX.Element {
         ? ACTIVE_EMPTY_SHEET_FAB_OFFSET
         : 40;
 
-  const animateTo = useCallback((latitude: number, longitude: number, zoom = 13) => {
-    mapRef.current?.animateCameraTo({
-      latitude,
-      longitude,
-      zoom,
-      duration: 500,
-    });
-  }, []);
+  const animateTo = useCallback(
+    (
+      latitude: number,
+      longitude: number,
+      zoom = 13,
+      options?: { clearBottomSheet?: boolean },
+    ) => {
+      // 바텀시트(~56%)에 가리지 않도록 카메라 중심을 남쪽으로 밀어 핀이 위쪽에 보이게
+      // zoom 13 기준 ~0.012° (약 1.3km). zoom이 커질수록 줄임.
+      const latBias = options?.clearBottomSheet
+        ? 0.012 * Math.pow(2, 13 - zoom)
+        : 0;
+      mapRef.current?.animateCameraTo({
+        latitude: latitude - latBias,
+        longitude,
+        zoom,
+        duration: 500,
+      });
+    },
+    [],
+  );
 
   useTabRepress(
     'map',
@@ -576,12 +788,39 @@ export default function MapScreen(): React.JSX.Element {
 
   const handleSelectPlace = useCallback(
     (place: Place) => {
-      setSelectedPlace(place);
+      // 핀에 붙은 대표 썸네일만 유지 — 이전 장소의 imageUrls/photoCount 잔상 방지
+      setPlaceDetailLoading(true);
+      setSelectedPlace({
+        ...place,
+        imageUrls: undefined,
+        photoCount: undefined,
+      });
       setSelectedPlanId(place.id);
-      animateTo(place.latitude, place.longitude);
+      animateTo(place.latitude, place.longitude, 13, { clearBottomSheet: true });
+      broadcastToWeb({ type: 'REQUEST_PLACE_DETAIL', placeId: place.id });
     },
     [animateTo],
   );
+
+  const handlePlaceSearch = useCallback((keyword: string) => {
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+      setPlaceSearching(false);
+      setPlaceSearchError(null);
+      setPlaceSearchResults([]);
+      return;
+    }
+    setPlaceSearching(true);
+    setPlaceSearchError(null);
+    setPlaceSearchResults([]);
+    broadcastToWeb({ type: 'REQUEST_PLACE_SEARCH', keyword: trimmed });
+  }, []);
+
+  const handleSelectSearchHit = useCallback((hit: MapPlaceSearchHit) => {
+    setSearchOpen(false);
+    pendingSelectFromSearchRef.current = hit.id;
+    broadcastToWeb({ type: 'REQUEST_PLACE_DETAIL', placeId: hit.id });
+  }, []);
 
   const handleSelectPlanWaypoint = useCallback(
     (waypoint: PlanWaypoint) => {
@@ -1095,41 +1334,20 @@ export default function MapScreen(): React.JSX.Element {
     setSelectedPlace(null);
   }, []);
 
-  const handleAddToCourse = useCallback((place: Place) => {
-    setSelectedPlace(null);
-    setPendingWebPath('plan', '/plan');
-    router.navigate('/(tabs)/plan');
-    Alert.alert(
-      '계획 탭으로 이동',
-      `${place.name}을(를) 일정에 넣으려면 계획 화면에서 추가해 주세요.`,
-    );
-  }, []);
-
   const handleSetDestination = useCallback(async (place: Place) => {
-    const { latitude, longitude, name } = place;
-    const label = encodeURIComponent(name);
-    const webUrl = `https://map.naver.com/v5/search/${label}`;
-    const appUrl =
-      Platform.OS === 'ios'
-        ? `maps://?daddr=${latitude},${longitude}&dirflg=d`
-        : `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`;
-
     setSelectedPlace(null);
-    try {
-      const canOpenApp = await Linking.canOpenURL(appUrl);
-      await Linking.openURL(canOpenApp ? appUrl : webUrl);
-    } catch {
-      Alert.alert('목적지로 설정', '지도 앱을 열 수 없어요. 잠시 후 다시 시도해 주세요.');
-    }
-  }, []);
-
-  const handleSharePlace = useCallback(async (place: Place) => {
-    try {
-      await Share.share({
-        message: `${place.name}${place.address ? ` · ${place.address}` : ''}`,
-      });
-    } catch {
-      // 사용자 취소 등
+    const opened = await openExternalMapUrls(
+      buildExternalDirectionsUrls({
+        name: place.name,
+        latitude: place.latitude,
+        longitude: place.longitude,
+      }),
+    );
+    if (!opened) {
+      Alert.alert(
+        '길찾기',
+        '지도 앱을 열 수 없어요. 잠시 후 다시 시도해 주세요.',
+      );
     }
   }, []);
 
@@ -1137,7 +1355,23 @@ export default function MapScreen(): React.JSX.Element {
     if (!selectedPlace) {
       return;
     }
+    if (!isAuthenticated) {
+      Alert.alert('로그인 필요', '즐겨찾기는 로그인 후 이용할 수 있어요.', [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '로그인',
+          onPress: () => {
+            router.push({
+              pathname: '/login',
+              params: { returnTo: '/map' },
+            });
+          },
+        },
+      ]);
+      return;
+    }
     const nextFavorite = !selectedPlace.isFavorite;
+    // 낙관적 UI — 실패 시 MAP_PLACE_FAVORITE_RESULT로 롤백
     setSelectedPlace({
       ...selectedPlace,
       isFavorite: nextFavorite,
@@ -1149,7 +1383,12 @@ export default function MapScreen(): React.JSX.Element {
           : place,
       ),
     );
-  }, [selectedPlace]);
+    broadcastToWeb({
+      type: 'REQUEST_TOGGLE_PLACE_FAVORITE',
+      placeId: selectedPlace.id,
+      nextFavorite,
+    });
+  }, [isAuthenticated, selectedPlace]);
 
   const handleCameraIdle = useCallback(
     (params: {
@@ -1439,7 +1678,6 @@ export default function MapScreen(): React.JSX.Element {
             isFavorite={selectedPlace.isFavorite}
             onBack={() => setSelectedPlace(null)}
             onToggleFavorite={handleToggleFavorite}
-            onShare={() => handleSharePlace(selectedPlace)}
           />
         ) : (
           <MapTopBar
@@ -1544,16 +1782,27 @@ export default function MapScreen(): React.JSX.Element {
 
       <PlaceDetailSheet
         place={selectedPlace}
-        onClose={() => setSelectedPlace(null)}
-        onAddToCourse={handleAddToCourse}
+        loading={placeDetailLoading}
+        onClose={() => {
+          setSelectedPlace(null);
+          setPlaceDetailLoading(false);
+        }}
+        onToggleFavorite={() => handleToggleFavorite()}
         onSetDestination={handleSetDestination}
       />
 
       <SearchModal
         visible={searchOpen}
-        places={mapPlaces}
-        onClose={() => setSearchOpen(false)}
-        onSelectPlace={handleSelectPlace}
+        results={placeSearchResults}
+        searching={placeSearching}
+        searchError={placeSearchError}
+        onClose={() => {
+          setSearchOpen(false);
+          setPlaceSearching(false);
+          setPlaceSearchError(null);
+        }}
+        onSearch={handlePlaceSearch}
+        onSelectPlace={handleSelectSearchHit}
       />
 
       {/* 모드 시트는 시트류 최상단 */}

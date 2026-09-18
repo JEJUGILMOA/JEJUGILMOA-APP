@@ -18,9 +18,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       ...config.ios?.infoPlist,
       ITSAppUsesNonExemptEncryption: false,
+      // foreground(When In Use)만 사용. Always 키는 선언만 하면 심사 리스크 → 넣지 않음.
       NSLocationWhenInUseUsageDescription:
-        '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
-      NSLocationAlwaysAndWhenInUseUsageDescription:
         '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
       // WebView <input type="file" accept="image/*"> 에서 "사진 찍기" 선택 시 필수.
       // 없으면 iOS가 권한 안내 대신 프로세스를 바로 종료한다.
@@ -28,9 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         '여행 기록에 사진을 첨부하기 위해 카메라에 접근합니다.',
       NSPhotoLibraryUsageDescription:
         '여행 기록에 사진을 첨부하기 위해 사진 보관함에 접근합니다.',
-      NSMicrophoneUsageDescription:
-        '카메라로 미디어를 촬영할 때 마이크가 필요할 수 있습니다.',
-      LSApplicationQueriesSchemes: ['nmap'],
+      LSApplicationQueriesSchemes: ['maps'],
     },
   },
   android: {
@@ -90,9 +87,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           ACCESS_COARSE_LOCATION: true,
         },
         ios: {
+          // When In Use만 — Always는 백그라운드 추적용. 미사용이므로 넣지 않음(심사 5.1.1).
           NSLocationWhenInUseUsageDescription:
-            '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
-          NSLocationAlwaysAndWhenInUseUsageDescription:
             '지도에서 내 위치 표시와 방문 인증을 위해 현재 위치를 사용합니다.',
         },
       },

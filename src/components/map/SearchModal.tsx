@@ -1,10 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import MapText from './MapText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapTokens } from '../../constants/map';
-import type { Place } from '../../types/map';
+import type { MapPlaceSearchHit } from '../../bridge/placeSheetStore';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import {
   loadRecentMapSearches,
   prependRecentSearch,
@@ -12,11 +21,18 @@ import {
 } from '../../utils/recentMapSearches';
 import { ClockIcon, CloseIcon, SearchIcon } from './MapIcons';
 
+const SEARCH_DEBOUNCE_MS = 350;
+/** 타이핑 검색 최소 글자 수 */
+const SEARCH_MIN_CHARS = 2;
+
 type Props = {
   visible: boolean;
-  places: Place[];
+  results: MapPlaceSearchHit[];
+  searching: boolean;
+  searchError?: string | null;
   onClose: () => void;
-  onSelectPlace: (place: Place) => void;
+  onSearch: (keyword: string) => void;
+  onSelectPlace: (place: MapPlaceSearchHit) => void;
 };
 
 function HighlightName({
@@ -49,20 +65,41 @@ function HighlightName({
 
 export default function SearchModal({
   visible,
-  places,
+  results,
+  searching,
+  searchError,
   onClose,
+  onSearch,
   onSelectPlace,
 }: Props): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
-  /** 검색 버튼/최근 검색으로 확정된 키워드 — 이 값으로만 결과 필터 */
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
 
   useEffect(() => {
     if (!visible) return;
     void loadRecentMapSearches().then(setRecentSearches);
   }, [visible]);
+
+  // 타이핑 debounce → API 검색 (최근 검색 기록은 선택/엔터 시에만)
+  useEffect(() => {
+    if (!visible) return;
+    const term = debouncedQuery.trim();
+    if (term.length === 0) {
+      setSubmittedQuery('');
+      onSearch('');
+      return;
+    }
+    if (term.length < SEARCH_MIN_CHARS) {
+      setSubmittedQuery('');
+      onSearch('');
+      return;
+    }
+    setSubmittedQuery(term);
+    onSearch(term);
+  }, [debouncedQuery, visible, onSearch]);
 
   const persistRecent = useCallback((next: string[]) => {
     setRecentSearches(next);
@@ -83,18 +120,6 @@ export default function SearchModal({
     [persistRecent, recentSearches],
   );
 
-  const results = useMemo(() => {
-    const q = submittedQuery.trim().toLowerCase();
-    if (!q) {
-      return [];
-    }
-    return places.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.address?.toLowerCase().includes(q) ?? false),
-    );
-  }, [places, submittedQuery]);
-
   const showResults = submittedQuery.trim().length > 0;
 
   const resetSearch = (): void => {
@@ -111,13 +136,15 @@ export default function SearchModal({
     const term = query.trim();
     if (!term) {
       setSubmittedQuery('');
+      onSearch('');
       return;
     }
     setSubmittedQuery(term);
     pushRecent(term);
+    onSearch(term);
   };
 
-  const handleSelectPlace = (place: Place): void => {
+  const handleSelectPlace = (place: MapPlaceSearchHit): void => {
     pushRecent(place.name);
     onSelectPlace(place);
     resetSearch();
@@ -128,6 +155,7 @@ export default function SearchModal({
     setQuery(term);
     setSubmittedQuery(term);
     pushRecent(term);
+    onSearch(term);
   };
 
   return (
@@ -196,40 +224,36 @@ export default function SearchModal({
         ) : (
           <View style={styles.section}>
             <MapText style={styles.sectionTitle}>검색 결과</MapText>
-            <FlatList
-              data={results}
-              keyExtractor={(item) => item.id}
-              keyboardShouldPersistTaps="handled"
-              ListEmptyComponent={
-                <MapText style={styles.empty}>일치하는 장소가 없어요.</MapText>
-              }
-              renderItem={({ item }) => (
-                <Pressable
-                  style={styles.resultRow}
-                  onPress={() => handleSelectPlace(item)}
-                >
-                  <View
-                    style={[
-                      styles.catDot,
-                      {
-                        backgroundColor:
-                          item.category === 'nature'
-                            ? MapTokens.green
-                            : item.category === 'food'
-                              ? MapTokens.coral
-                              : MapTokens.blue,
-                      },
-                    ]}
-                  />
-                  <View style={styles.resultTexts}>
+            {searching ? (
+              <View style={styles.loadingWrap}>
+                <ActivityIndicator color={MapTokens.green} />
+                <MapText style={styles.empty}>검색 중…</MapText>
+              </View>
+            ) : searchError ? (
+              <MapText style={styles.empty}>{searchError}</MapText>
+            ) : (
+              <FlatList
+                data={results}
+                keyExtractor={(item) => item.id}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={
+                  <MapText style={styles.empty}>검색 결과가 없어요.</MapText>
+                }
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={styles.resultRow}
+                    onPress={() => handleSelectPlace(item)}
+                  >
                     <HighlightName name={item.name} query={submittedQuery} />
                     {item.address ? (
-                      <MapText style={styles.resultAddr}>{item.address}</MapText>
+                      <MapText style={styles.resultAddress} numberOfLines={1}>
+                        {item.address}
+                      </MapText>
                     ) : null}
-                  </View>
-                </Pressable>
-              )}
-            />
+                  </Pressable>
+                )}
+              />
+            )}
           </View>
         )}
       </View>
@@ -241,23 +265,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: MapTokens.surface,
+    paddingHorizontal: 16,
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
     gap: 10,
-    marginBottom: 8,
+    marginBottom: 16,
   },
   inputWrap: {
     flex: 1,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: MapTokens.background,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
     gap: 8,
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: MapTokens.background,
   },
   input: {
     flex: 1,
@@ -267,33 +291,40 @@ const styles = StyleSheet.create({
   },
   cancel: {
     fontSize: 15,
-    color: MapTokens.green,
     fontWeight: '600',
+    color: MapTokens.text,
   },
   section: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 12,
   },
   sectionTitle: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: MapTokens.textMuted,
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  empty: {
+    fontSize: 14,
+    color: MapTokens.textMuted,
+    marginTop: 8,
+  },
+  loadingWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
   },
   recentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: MapTokens.border,
+    minHeight: 44,
   },
   recentMain: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 12,
-    minWidth: 0,
+    paddingVertical: 10,
   },
   recentText: {
     flex: 1,
@@ -301,43 +332,26 @@ const styles = StyleSheet.create({
     color: MapTokens.text,
   },
   recentRemove: {
-    paddingVertical: 12,
-    paddingLeft: 12,
-    paddingRight: 4,
+    padding: 8,
   },
   resultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: MapTokens.border,
   },
-  catDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  resultTexts: {
-    flex: 1,
-  },
   resultName: {
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '600',
     color: MapTokens.text,
-    fontWeight: '500',
   },
   highlight: {
+    fontSize: 16,
+    fontWeight: '800',
     color: MapTokens.green,
-    fontWeight: '700',
   },
-  resultAddr: {
-    marginTop: 2,
-    fontSize: 12,
-    color: MapTokens.textMuted,
-  },
-  empty: {
-    marginTop: 24,
-    textAlign: 'center',
+  resultAddress: {
+    marginTop: 4,
+    fontSize: 13,
     color: MapTokens.textMuted,
   },
 });

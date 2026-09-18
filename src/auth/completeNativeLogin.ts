@@ -36,6 +36,16 @@ export function resolveLoginReturnTo(returnTo?: string): {
   return { tabRoute: '/(tabs)', tabName: 'index', path: raw === '/login' ? '/' : raw };
 }
 
+/** 탭 WebView 히스토리 바닥 — 로그인 후 뒤로가기 목적지 */
+export function tabRootPathForReturnTo(returnTo: string): string {
+  const pathOnly = returnTo.split('?')[0] || '/';
+  if (pathOnly === '/plan' || pathOnly.startsWith('/plan/')) return '/plan';
+  if (pathOnly === '/record' || pathOnly.startsWith('/record/')) return '/record';
+  if (pathOnly === '/my' || pathOnly.startsWith('/my/')) return '/my';
+  if (pathOnly === '/map' || pathOnly.startsWith('/map/')) return '/map';
+  return '/';
+}
+
 function applyStoredAuth(auth?: {
   accessToken?: string;
   user?: { id: string; nickname: string; profileImageUrl?: string };
@@ -77,8 +87,15 @@ export async function completeNativeLogin(options: {
   });
 
   const { tabRoute, tabName, path } = resolveLoginReturnTo(options.returnTo);
-  if (path && path !== '/') {
+  // 탭 루트를 먼저 연 뒤 returnTo로 push → 뒤로가기가 로그인 이전(탭 루트)으로 동작
+  const root = tabRootPathForReturnTo(path);
+  const pathOnly = path.split('?')[0] || '/';
+  if (pathOnly !== root) {
+    setPendingWebPath(tabName, root, path);
+  } else if (path && path !== '/') {
     setPendingWebPath(tabName, path);
+  } else {
+    setPendingWebPath(tabName, root);
   }
 
   // 로그인 세션으로 모든 탭 WebView·지도 데이터를 다시 불러온다

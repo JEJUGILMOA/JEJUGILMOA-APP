@@ -3,13 +3,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapTokens } from '../../constants/map';
-import { ChevronLeftIcon, ShareIcon, StarIcon } from './MapIcons';
+import { ChevronLeftIcon, StarIcon } from './MapIcons';
 
 type Props = {
   isFavorite?: boolean;
   onBack: () => void;
   onToggleFavorite: () => void;
-  onShare: () => void;
 };
 
 /** MAP-06: 장소 상세 시 상단 플로팅 컨트롤 (검색바 대체) */
@@ -17,7 +16,6 @@ export default function PlaceDetailChrome({
   isFavorite,
   onBack,
   onToggleFavorite,
-  onShare,
 }: Props): React.JSX.Element {
   const insets = useSafeAreaInsets();
 
@@ -34,27 +32,18 @@ export default function PlaceDetailChrome({
       >
         <ChevronLeftIcon color={MapTokens.text} size={22} />
       </Pressable>
-      <View style={styles.right}>
-        <Pressable
-          style={styles.btn}
-          onPress={onToggleFavorite}
-          accessibilityRole="button"
-          accessibilityLabel="즐겨찾기"
-        >
-          <StarIcon
-            color={isFavorite ? MapTokens.amber : MapTokens.text}
-            size={20}
-          />
-        </Pressable>
-        <Pressable
-          style={styles.btn}
-          onPress={onShare}
-          accessibilityRole="button"
-          accessibilityLabel="공유"
-        >
-          <ShareIcon color={MapTokens.text} size={18} />
-        </Pressable>
-      </View>
+      <Pressable
+        style={styles.btn}
+        onPress={onToggleFavorite}
+        accessibilityRole="button"
+        accessibilityLabel={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+      >
+        <StarIcon
+          color={isFavorite ? MapTokens.amber : MapTokens.text}
+          filled={Boolean(isFavorite)}
+          size={20}
+        />
+      </Pressable>
     </View>
   );
 }
@@ -70,10 +59,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-  },
-  right: {
-    flexDirection: 'row',
-    gap: 8,
   },
   btn: {
     width: 44,

@@ -63,6 +63,21 @@ export function boundsEqual(a: MapBounds, b: MapBounds): boolean {
   );
 }
 
+/** 좌표 중심의 정사각에 가까운 검색 영역 (영역 재조회·핀 표시용) */
+export function boundsAroundPoint(
+  latitude: number,
+  longitude: number,
+  latDelta = 0.04,
+  lngDelta = 0.05,
+): MapBounds {
+  return roundBounds({
+    minLat: latitude - latDelta / 2,
+    maxLat: latitude + latDelta / 2,
+    minLng: longitude - lngDelta / 2,
+    maxLng: longitude + lngDelta / 2,
+  });
+}
+
 export function boundsKey(bounds: MapBounds): string {
   return `${bounds.minLat},${bounds.maxLat},${bounds.minLng},${bounds.maxLng}`;
 }

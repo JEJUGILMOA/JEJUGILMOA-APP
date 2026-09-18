@@ -67,15 +67,8 @@ const styles = StyleSheet.create({
   pin: {
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 3,
   },
   pinSelected: {
-    shadowOpacity: 0.28,
-    shadowRadius: 5,
-    elevation: 5,
+    // 선택 강조는 크기만 — 마커 스냅샷에서 shadow가 검은 테두리로 보임
   },
 });

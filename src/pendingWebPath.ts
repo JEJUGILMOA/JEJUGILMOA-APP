@@ -1,13 +1,23 @@
 /** 탭 WebView로 넘길 딥링크. 해당 탭 포커스 시 take 한다. */
-type Pending = { tabName: string; path: string };
+export type PendingWebPath = {
+  tabName: string;
+  /** WebView 최초 로드 URL (히스토리 바닥) */
+  path: string;
+  /** path 로드 후 React Router로 push할 경로 (뒤로가기용) */
+  pushPath?: string;
+};
 
 type ForceListener = (tabName: string, path: string) => void;
 
-let pending: Pending | null = null;
+let pending: PendingWebPath | null = null;
 const forceListeners = new Set<ForceListener>();
 
-export function setPendingWebPath(tabName: string, path: string) {
-  pending = { tabName, path };
+export function setPendingWebPath(tabName: string, path: string, pushPath?: string) {
+  pending = {
+    tabName,
+    path,
+    ...(pushPath && pushPath !== path ? { pushPath } : {}),
+  };
 }
 
 /**
@@ -19,9 +29,9 @@ export function forceTabWebPath(tabName: string, path: string) {
   forceListeners.forEach((listener) => listener(tabName, path));
 }
 
-export function takePendingWebPath(tabName: string): string | null {
+export function takePendingWebPath(tabName: string): PendingWebPath | null {
   if (!pending || pending.tabName !== tabName) return null;
-  const next = pending.path;
+  const next = pending;
   pending = null;
   return next;
 }
